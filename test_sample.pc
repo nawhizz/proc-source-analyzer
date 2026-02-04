@@ -1,0 +1,102 @@
+
+#include <stdio.h>
+#include <string.h>
+
+/*
+ * 프로그램 명 : 테스트 샘플 프로그램
+ */
+
+void main() {
+    // Static SQL Examples
+    
+    // Select
+    EXEC SQL SELECT * FROM TB_USER WHERE ID = :id;
+
+    // Insert
+    EXEC SQL INSERT INTO TB_LOG (MSG) VALUES (:msg);
+
+    // Multi-line Select
+    EXEC SQL 
+        SELECT * 
+          FROM TB_USER_MULTI_SELECT 
+         WHERE ID = :id;
+         
+    // Multi-line Insert
+    EXEC SQL 
+        INSERT INTO TB_LOG_MULTI_INSERT 
+        (MSG) 
+        VALUES 
+        (:msg);
+
+    // Update
+    EXEC SQL UPDATE TB_USER SET NAME = :name WHERE ID = :id;
+
+    // Delete
+    EXEC SQL DELETE FROM TB_OLD_DATA;
+
+    // Multi-line Update
+    EXEC SQL 
+        UPDATE TB_USER_MULTI 
+           SET NAME = :name 
+         WHERE ID = :id;
+
+    // Multi-line Delete
+    EXEC SQL 
+        DELETE 
+          FROM TB_OLD_DATA_MULTI;
+
+    // Cursor (Select)
+    EXEC SQL DECLARE C1 CURSOR FOR SELECT * FROM TB_ACCOUNT;
+    
+    // Dynamic SQL Examples (String Literals)
+    
+    char query[256];
+    
+    // Simple dynamic delete
+    char *sql1 = "DELETE FROM TB_TEMP_DATA WHERE 1=1";
+    
+    // Dynamic update with separate buffer
+    strcpy(query, "UPDATE TB_LOG SET STATUS = 'Y'");
+    
+    // Complex format string (should still catch the table literal)
+    sprintf(buf, "SELECT COUNT(*) FROM %s WHERE ID > 100", "TB_DYNAMIC"); 
+    
+    // Case with no CRUD (should be ignored or handled if we want just table usage? Currently logic requires CRUD keyword)
+    // If just table name is present without CRUD, it won't be listed.
+    char *tableName = "TB_CONFIG_ONLY"; 
+    
+    // Case with CRUD but no TB_ (ignored)
+    char *otherSql = "SELECT * FROM USER_TABLES"; 
+
+    // MERGE Examples
+
+    // 1. Full MERGE (Insert + Update) + Source Table (Select)
+    EXEC SQL MERGE INTO TB_MERGE_FULL T
+        USING TB_MERGE_SOURCE S ON (T.ID = S.ID)
+        WHEN MATCHED THEN UPDATE SET T.VAL = S.VAL
+        WHEN NOT MATCHED THEN INSERT (ID, VAL) VALUES (S.ID, S.VAL);
+
+    // 2. MERGE Update Only
+    EXEC SQL MERGE INTO TB_MERGE_UPDATE T
+        USING DUAL ON (T.ID = :id)
+        WHEN MATCHED THEN UPDATE SET T.VAL = :val;
+
+    // 3. MERGE Insert Only
+    EXEC SQL MERGE INTO TB_MERGE_INSERT T
+        USING DUAL ON (T.ID = :id)
+        WHEN NOT MATCHED THEN INSERT (ID, VAL) VALUES (:id, :val);
+
+    // 4. Complex Multi-line MERGE
+    EXEC SQL 
+        MERGE 
+         INTO TB_MERGE_MULTI_LINE_COMPLEX T
+        USING DUAL ON (T.ID = :id)
+        WHEN MATCHED THEN 
+        UPDATE 
+           SET T.VAL = :val
+        WHEN NOT MATCHED THEN 
+        INSERT (
+               ID, VAL
+               )
+        VALUES (:id, :val);
+}
