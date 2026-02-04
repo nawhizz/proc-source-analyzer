@@ -21,7 +21,7 @@ Pro*C 소스 코드(`*.pc`)를 분석하여 사용된 **테이블(TB_*)**과 해
 별도의 라이브러리 설치가 필요 없습니다. 파이썬이 설치된 환경에서 바로 실행 가능합니다.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/nawhizz/proc-source-analyzer.git
 cd source-analysis
 ```
 
