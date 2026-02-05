@@ -164,10 +164,11 @@ def main():
         files_to_process.append(args.file)
     elif args.folder:
         if os.path.exists(args.folder):
-            search_pattern = os.path.join(args.folder, "*.pc")
-            files_to_process = glob.glob(search_pattern)
+            # Recursive search using ** (requires Python 3.5+)
+            search_pattern = os.path.join(args.folder, "**", "*.pc")
+            files_to_process = glob.glob(search_pattern, recursive=True)
             if not files_to_process:
-                print(f"No *.pc files found in: {args.folder}")
+                print(f"No *.pc files found in: {args.folder} (recursive scan)")
         else:
             print(f"Error: Directory not found - {args.folder}")
             sys.exit(1)
