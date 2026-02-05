@@ -3,7 +3,7 @@ import sys
 import os
 from collections import defaultdict
 
-def analyze_file(file_path):
+def analyze_file(file_path, encoding='euc-kr'):
     """
     Pro*C 파일을 분석하여 TB_로 시작하는 테이블과 CRUD 작업을 추출합니다.
     EXEC SQL 블록과 문자열 리터럴(동적 쿼리)을 모두 분석합니다.
@@ -14,7 +14,7 @@ def analyze_file(file_path):
         return {}, ""
 
     try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, 'r', encoding=encoding, errors='ignore') as f:
             content = f.read()
     except Exception as e:
         print(f"Error reading file: {e}")
@@ -33,7 +33,7 @@ def analyze_file(file_path):
     # 1. EXEC SQL 블록 분석 (정적 쿼리)
     # exec sql 로 시작하고 ; 로 끝나는 블록을 찾음 (줄바꿈 포함)
     exec_sql_pattern = re.compile(r'EXEC\s+SQL\s+(.*?);', re.DOTALL | re.IGNORECASE)
-    
+
     for match in exec_sql_pattern.finditer(content):
         sql_block = match.group(1)
         extract_table_crud(sql_block, table_ops, source="STATIC")
@@ -41,18 +41,18 @@ def analyze_file(file_path):
     # 2. 문자열 리터럴 분석 (동적 쿼리)
     # 큰따옴표로 묶인 문자열을 찾음
     string_literal_pattern = re.compile(r'"([^"]*)"')
-    
+
     for match in string_literal_pattern.finditer(content):
         sql_string = match.group(1)
-        # 문자열 안에 TB_ 테이블이 있는지 확인
-        if "TB_" in sql_string:
+        # 문자열 안에 TB_, ATA_, EM_ 테이블이 있는지 확인
+        if any(prefix in sql_string for prefix in ["TB_", "ATA_", "EM_"]):
             extract_table_crud(sql_string, table_ops, source="DYNAMIC")
 
     return table_ops, source_desc
 
 def extract_table_crud(sql_text, table_ops, source="UNKNOWN"):
     """
-    SQL 텍스트(또는 문자열)에서 TB_ 테이블과 CRUD 키워드를 추출하여 table_ops에 저장합니다.
+    SQL 텍스트(또는 문자열)에서 TB_, ATA_, EM_ 테이블과 CRUD 키워드를 추출하여 table_ops에 저장합니다.
     """
     # 대문자로 변환하여 분석
     sql_upper = sql_text.upper()
@@ -63,8 +63,8 @@ def extract_table_crud(sql_text, table_ops, source="UNKNOWN"):
         return
 
     # 일반적인 "Bag of Words" 방식 처리
-    # 테이블 찾기: TB_로 시작하고 영문자, 숫자, 언더스코어로 구성된 단어
-    table_pattern = re.compile(r'\b(TB_[A-Z0-9_]+)\b')
+    # 테이블 찾기: TB_, ATA_, EM_ 등으로 시작하고 (앞에 스키마명. 이 올 수 있음) 영문자, 숫자, 언더스코어로 구성된 단어
+    table_pattern = re.compile(r'\b((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)\b')
     tables = table_pattern.findall(sql_upper)
     
     if not tables:
@@ -83,6 +83,10 @@ def extract_table_crud(sql_text, table_ops, source="UNKNOWN"):
     
     if ops:
         for table in tables:
+            # NHPT. 스키마 제거
+            if table.startswith("NHPT."):
+                table = table.replace("NHPT.", "")
+            
             for op in ops:
                 table_ops[table].add(op)
 
@@ -92,12 +96,15 @@ def process_merge_statement(sql_upper, table_ops):
     Source 테이블 등에는 SELECT를 부여합니다.
     """
     # Target Table 추출: MERGE INTO [Table]
-    target_pattern = re.compile(r'MERGE\s+INTO\s+(TB_[A-Z0-9_]+)')
+    target_pattern = re.compile(r'MERGE\s+INTO\s+((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)')
     target_match = target_pattern.search(sql_upper)
     
     target_table = None
     if target_match:
         target_table = target_match.group(1)
+        # NHPT. 스키마 제거
+        if target_table.startswith("NHPT."):
+            target_table = target_table.replace("NHPT.", "")
         
         # Target Table Operations
         if re.search(r'WHEN\s+MATCHED\s+THEN\s+UPDATE', sql_upper):
@@ -108,15 +115,25 @@ def process_merge_statement(sql_upper, table_ops):
             
     # 나머지 테이블 추출 (Source Tables) -> SELECT 취급
     # 전체 테이블 찾기
-    all_table_pattern = re.compile(r'\b(TB_[A-Z0-9_]+)\b')
+    all_table_pattern = re.compile(r'\b((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)\b')
     all_tables = set(all_table_pattern.findall(sql_upper))
     
-    # Target Table 제외
-    if target_table and target_table in all_tables:
-        all_tables.remove(target_table)
+    # Target Table 제외 (Cleaned target table removal might be tricky if original was different)
+    # Careful: We need to remove the raw string found in regex, NOT the cleaned one, 
+    # to correctly subtract from all_tables which contains raw strings.
+    # But wait, all_tables contains strings. 
+    
+    # Let's clean all_tables first? No, we need to exclude the target match string from the source list.
+    if target_match:
+        raw_target_table = target_match.group(1)
+        if raw_target_table in all_tables:
+            all_tables.remove(raw_target_table)
         
     # 나머지는 모두 SELECT (USING 구문 등)
     for table in all_tables:
+        # NHPT. 스키마 제거
+        if table.startswith("NHPT."):
+            table = table.replace("NHPT.", "")
         table_ops[table].add('SELECT')
 
 import argparse
@@ -133,6 +150,7 @@ def main():
     parser.add_argument("-d", "--folder", help="Directory path to scan for *.pc files")
     parser.add_argument("-e", "--excel", help="Output Excel filename (e.g., result.xlsx)")
     parser.add_argument("-m", "--merge", action="store_true", help="Merge cells for same Source Name and Source Desc. in Excel")
+    parser.add_argument("-c", "--encoding", default="euc-kr", help="File encoding (default: euc-kr)")
     
     args = parser.parse_args()
     
@@ -161,7 +179,7 @@ def main():
     all_results = [] # List of tuples: (filename, source_desc, table, operations)
 
     for file_path in files_to_process:
-        result, source_desc = analyze_file(file_path)
+        result, source_desc = analyze_file(file_path, encoding=args.encoding)
         file_name = os.path.basename(file_path)
 
         # Console Output

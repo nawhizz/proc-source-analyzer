@@ -81,10 +81,31 @@ python proc_analyzer.py -d ./src -e result.xlsx -m
 python proc_analyzer.py -d ./src -e result.xlsx --merge
 ```
 
+### 5. 인코딩 지정 (옵션)
+
+기본적으로 `EUC-KR` 인코딩으로 파일을 읽습니다. 만약 `UTF-8` 등 다른 인코딩을 사용하는 경우 `--encoding` (또는 `-c`) 옵션을 사용하세요.
+
+```bash
+python proc_analyzer.py -f test_sample.pc --encoding utf-8
+# 또는
+python proc_analyzer.py -f test_sample.pc -c utf-8
+```
+
 ## 분석 로직 상세
 
 ### 테이블 식별
-- 정규표현식 `TB_[A-Z0-9_]+` 패턴을 사용하여 대문자로 된 테이블명을 찾습니다.
+### 테이블 식별
+- 다음 정규표현식 패턴을 사용하여 테이블명을 추출합니다.
+    - `\b((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)\b`
+- **지원 패턴**:
+    - `TB_`로 시작하는 테이블 (예: `TB_USER`)
+    - `ATA_`, `EM_`으로 시작하는 테이블 (예: `ATA_TALK`, `EM_MSG`)
+    - 스키마가 포함된 테이블 (예: `NHPT.TB_CUSTOMER`, `NHPT_KATK.ATA_TALK`)
+
+### 테이블명 정제
+- **NHPT 스키마 제거**: `NHPT.` 스키마를 사용하는 테이블의 경우, 출력 시 스키마명을 제거합니다.
+    - `NHPT.TB_NHPT_LOG` → `TB_NHPT_LOG` 로 출력됩니다.
+    - 그 외 스키마(예: `NHPT_OTHER.TB_TEST`)는 그대로 출력됩니다.
 
 ### CRUD 식별
 - **정적 쿼리**: `EXEC SQL ... ;` 블록 내부를 검사합니다.
