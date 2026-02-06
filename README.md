@@ -110,14 +110,30 @@ python proc_analyzer.py -f test_sample.pc -c utf-8
 
 ### CRUD 식별
 - **정적 쿼리**: `EXEC SQL ... ;` 블록 내부를 검사합니다.
+- **동작 방식 개선 (Context-Aware)**:
+    - 단순 키워드 매칭이 아니라, 문맥을 분석하여 정확도를 높였습니다.
+    - `INSERT INTO`, `UPDATE`, `DELETE [FROM]`의 대상 테이블을 정확히 식별합니다.
+    - **SELECT 식별 강화**: 
+        - 테이블이 `FROM` 절이나 `JOIN` 절에 위치하는 경우에만 SELECT로 분류합니다.
+        - 이를 통해 `SELECT List` 내의 컬럼명, `WHERE` 절, `UPDATE SET` 절 등에 포함된 테이블 유사 명칭(`ATA_ID` 등)이 오탐지되는 것을 방지합니다.
 - **동적 쿼리**:
-    - 소스 코드 내의 `"..."` 문자열 리터럴을 검사하여 테이블명과 SQL 키워드가 함께 존재하는지 확인합니다.
-    - **C언어 문자열 연결 지원**: `sprintf` 등에서 여러 줄에 걸쳐 작성된 문자열(`"..." \n "..."`)을 하나로 연결하여 분석합니다. 이를 통해 줄바꿈으로 인해 테이블명이나 키워드가 분리되어도 정확히 인식합니다.
+    - 소스 코드 내의 `"..."` 문자열 리터럴을 검사합니다.
+    - **C언어 문자열 연결 지원**: `sprintf` 등에서 여러 줄(`"..." \n "..."`)로 작성된 쿼리를 하나로 연결하여 분석합니다.
+    - **이스케이프 시퀀스 처리**: `\n`, `\t` 등 C언어 포맷팅 문자를 공백으로 치환하여 분석 정확도를 보장합니다.
 - **MERGE 문**:
-    - `WHEN MATCHED THEN UPDATE` 구문이 있으면 **UPDATE**로 분류합니다.
-    - `WHEN NOT MATCHED THEN INSERT` 구문이 있으면 **INSERT**로 분류합니다.
-    - `USING` 절에 사용된 테이블은 **SELECT**로 분류합니다.
-    - **자기 참조 지원**: `MERGE`의 대상(Target) 테이블이 `USING` 절 등에서 다시 참조되는 경우, `UPDATE/INSERT`뿐만 아니라 **SELECT** 권한도 올바르게 추출합니다.
+    - `WHEN MATCHED THEN UPDATE` → **UPDATE**
+    - `WHEN NOT MATCHED THEN INSERT` → **INSERT**
+    - `USING` 절 및 기타 참조 → **SELECT**
+    - `re.DOTALL`을 적용하여 줄바꿈이 포함된 복잡한 MERGE 문도 정확히 파싱합니다.
+- **SQL 힌트/주석 처리**: 
+    - 쿼리 분석 전 `/* ... */` 주석과 힌트를 제거하여, 힌트 사이에 낀 키워드(`INSERT /*+ hint */ INTO`)도 정상 인식합니다.
+
+### 소스 설명 추출
+소스 파일 상단의 주석에서 다음 순서대로 키워드를 찾아 설명을 추출합니다.
+1. `프로그램명 : ...`
+2. `파일명(한글) : ...`
+3. `Description : ...`
+4. `Descritpion : ...` (오타 대응)
 
 ## 출력 예시
 

@@ -245,9 +245,74 @@ def test_column_confusion_issue():
         print("\nSUCCESS (Column Confusion): ATA_ID ignored")
         return True
 
+def test_context_collision_issue():
+    # Case: ATA_ID used in SELECT list, WHERE clause, etc.
+    sql_text = """
+    EXEC SQL
+        SELECT ATA_ID
+             , DATE_CLIENT_REQ
+             , SUBJECT
+          FROM NHPT_KATK.ATA_SMT_LOG_TABLE
+         WHERE ATA_ID = :id
+    ;
+    """
+    
+    print("\nTesting Context Collision (SELECT):\n", sql_text)
+    table_ops = defaultdict(set)
+    extract_table_crud(sql_text, table_ops, source="TEST_CTX_SEL")
+    
+    failures = []
+    if 'ATA_ID' in table_ops:
+        failures.append(f"[SELECT] ATA_ID should NOT be identified as a table. Found: {table_ops['ATA_ID']}")
+    if 'SELECT' not in table_ops.get('ATA_SMT_LOG_TABLE', []):
+        failures.append("[SELECT] ATA_SMT_LOG_TABLE should have SELECT")
+
+    # UPDATE Case
+    sql_update = """
+    EXEC SQL
+        UPDATE NHPT_KATK.ATA_SMT_LOG_TABLE
+           SET ATA_ID = 'NEW'
+         WHERE ATA_ID = 'OLD'
+    ;
+    """
+    print("\nTesting Context Collision (UPDATE):\n", sql_update)
+    table_ops_upd = defaultdict(set)
+    extract_table_crud(sql_update, table_ops_upd, source="TEST_CTX_UPD")
+    
+    if 'ATA_ID' in table_ops_upd:
+        failures.append(f"[UPDATE] ATA_ID should NOT be identified as a table. Found: {table_ops_upd['ATA_ID']}")
+    if 'UPDATE' not in table_ops_upd.get('ATA_SMT_LOG_TABLE', []):
+        failures.append("[UPDATE] ATA_SMT_LOG_TABLE should have UPDATE")
+
+    # DELETE Case
+    sql_delete = """
+    EXEC SQL
+        DELETE FROM NHPT_KATK.ATA_SMT_LOG_TABLE
+         WHERE ATA_ID = 'DEL'
+    ;
+    """
+    print("\nTesting Context Collision (DELETE):\n", sql_delete)
+    table_ops_del = defaultdict(set)
+    extract_table_crud(sql_delete, table_ops_del, source="TEST_CTX_DEL")
+    
+    if 'ATA_ID' in table_ops_del:
+        failures.append(f"[DELETE] ATA_ID should NOT be identified as a table. Found: {table_ops_del['ATA_ID']}")
+    if 'DELETE' not in table_ops_del.get('ATA_SMT_LOG_TABLE', []):
+        failures.append("[DELETE] ATA_SMT_LOG_TABLE should have DELETE")
+
+    if failures:
+        print("\nFAILURES (Context Collision):")
+        for f in failures:
+            print(f"- {f}")
+        return False
+    else:
+        print("\nSUCCESS (Context Collision): ATA_ID consistently ignored in non-table positions")
+        return True
+
 if __name__ == "__main__":
     test_insert_select_issue()
     test_dynamic_sql_issue()
     test_hinted_sql_issue()
     test_string_literal_issue()
     test_column_confusion_issue()
+    test_context_collision_issue()

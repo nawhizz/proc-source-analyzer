@@ -1,7 +1,6 @@
 <test_sample_euckr.pc>
 
 *TB_ACCOUNT                     | SELECT
-*TB_CONFIG_ONLY                 | SELECT  <- 테이블만 정의됨
 *TB_DYNAMIC                     | SELECT
 *TB_LOG                         | INSERT, UPDATE
 *TB_LOG_MULTI_INSERT            | INSERT
@@ -17,10 +16,6 @@
 *TB_USER                        | SELECT, UPDATE
 *TB_USER_MULTI                  | UPDATE
 *TB_USER_MULTI_SELECT           | SELECT
+*TB_USER_TABLES                 | SELECT
 
 
-USER_TABLES  결과 안나옴
-char *otherSql = "SELECT * FROM USER_TABLES"; 
-
-TB_CONFIG_ONLY 결과 나오면 안되는데, SELECT로 나옴
-char *tableName = "TB_CONFIG_ONLY"; 

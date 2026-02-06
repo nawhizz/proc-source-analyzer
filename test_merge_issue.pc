@@ -1,17 +1,5 @@
-
-#include <stdio.h>
-#include <string.h>
-
-/*
- * 프로그램 명 : 테스트 샘플 프로그램
- */
-
-/****************************************************
- ATA_SMT_LOG_TABLE INSERT
-****************************************************/
-void main() {
-    char query2[256*100];
-	
+void test_function() {
+    char query2[2000];
     sprintf(query2," MERGE /*+ SABT00022.pc|uf_tb_k6 */ INTO NHPT.TB_MP_MB_MH_SLCALCUZINF A    \n"
                    " USING (                                      \n"
                    "	SELECT A.SLCL_DT                          \n"

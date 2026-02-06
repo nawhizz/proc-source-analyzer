@@ -23,12 +23,22 @@ def analyze_file(file_path, encoding='euc-kr'):
     table_ops = defaultdict(set)
     source_desc = ""
 
-    # 0. 프로그램명 추출
-    # 패턴: "프로그램(공백)명(공백):(공백)내용"
-    desc_pattern = re.compile(r'프로그램\s*명\s*:\s*(.*)', re.IGNORECASE)
-    desc_match = desc_pattern.search(content)
-    if desc_match:
-        source_desc = desc_match.group(1).strip()
+    # 0. 프로그램명 / 설명 추출
+    # 우선순위: 프로그램명 -> 파일명(한글) -> Description
+    patterns = [
+        r'프로그램\s*명\s*:\s*(.*)',      # 프로그램 명 : ...
+        r'파일명\s*\(\s*한글\s*\)\s*:\s*(.*)',  # 파일명(한글) : ...
+        r'Description\s*:\s*(.*)',      # Description : ...
+        r'Descritpion\s*:\s*(.*)'      # Descritpion : ...
+    ]
+    
+    for pat in patterns:
+        match = re.search(pat, content, re.IGNORECASE)
+        if match:
+            extracted = match.group(1).strip()
+            if extracted:
+                source_desc = extracted
+                break
     
     # 1. EXEC SQL 블록 분석 (정적 쿼리)
     # exec sql 로 시작하고 ; 로 끝나는 블록을 찾음 (줄바꿈 포함)
@@ -58,6 +68,11 @@ def analyze_file(file_path, encoding='euc-kr'):
         if parts:
             # 2. 하나의 문자열로 결합 (공백 하나로 구분하여 안전하게 연결)
             sql_string = " ".join(parts)
+            
+            # C-style escape sequence handling (\n, \r, \t -> space)
+            # Literal backslash + n/r/t in the source string becomes literal characters in sql_string
+            # We replace them with space to allow regex \s+ to match
+            sql_string = re.sub(r'\\[nrt]', ' ', sql_string)
             
             # 문자열 안에 TB_, ATA_, EM_ 테이블이 있는지 확인
             if any(prefix in sql_string for prefix in ["TB_", "ATA_", "EM_"]):
@@ -168,6 +183,74 @@ def extract_table_crud(sql_text, table_ops, source="UNKNOWN"):
     # 첫번째 T1: INSERT 마킹됨
     # 두번째 T1: 마킹 안됨 -> SELECT 추가
     
+    # [ROBUST SELECT LOGIC]
+    # 단순 Default가 아니라, FROM 또는 JOIN 절에 포함되어 있는지 역방향 탐색으로 확인합니다.
+    # 이를 통해 SELECT 절, WHERE 절, UPDATE SET 절 등에 있는 컬럼명(ATA_ID 등)이 오탐지되는 것을 방지합니다.
+    
+    def is_select_source(table_info):
+        # 테이블 시작 위치에서 역방향으로 스캔하여, 문장의 구조적 위치를 파악
+        start_pos = table_info['start']
+        # 최대 1000자 정도 역탐색 (성능 고려)
+        lookback_limit = max(0, start_pos - 1000)
+        chunk = sql_clean[lookback_limit:start_pos]
+        
+        # 역순으로 하나씩 토큰을 확인
+        # 의미있는 토큰: FROM, JOIN, ',', INSERT, UPDATE, DELETE, SET, WHERE, SELECT, '(', ')'
+        # 콤마(',')는 계속 이전 항목을 찾도록 연결해줌 (FROM T1, T2)
+        # 하지만 SELECT T1, T2 FROM ... 과 구분하기 위해
+        # 콤마를 만나면 계속 뒤로 가되, 궁극적으로 FROM/JOIN을 만나야 함.
+        # SELECT, SET, WHERE 등을 만나면 False.
+        
+        # 정규식으로 토큰화하여 마지막(가장 가까운) 토큰부터 확인
+        # \b 키워드 \b 또는 구두점
+        tokens = list(re.finditer(r'\b(FROM|JOIN|UPDATE|INSERT|DELETE|SELECT|SET|WHERE|GROUP|ORDER|HAVING|VALUES)\b|[,()]', chunk, re.IGNORECASE))
+        
+        if not tokens:
+            return False
+            
+        # 뒤에서부터 순회
+        paren_depth = 0
+        for i in range(len(tokens)-1, -1, -1):
+            tok = tokens[i].group().upper()
+            
+            if tok == ')':
+                paren_depth += 1
+            elif tok == '(':
+                # FROM (Subquery) -> Subquery 닫힘? 아니면 여는 괄호?
+                # 역순이므로 ')' 가 먼저 나오고 '(' 가 나중에 나옴.
+                # 즉 ')' 는 닫는 괄호(원래 문장 순서상), '(' 는 여는 괄호.
+                if paren_depth > 0:
+                    paren_depth -= 1
+                else:
+                    # 괄호 밖으로 나감? 혹은 단순 그룹핑?
+                    # FROM (TB) -> OK.
+                    # IN (COL) -> OK.
+                    # 일단 괄호는 구조적 장벽으로 보고, depth 0일때 괄호에 막히면 중단할 수도 있음.
+                    # 하지만 Table 명이 바로 뒤에 나오는 경우 (FROM T1) 에는 괄호가 없음.
+                    # (T1) -> T1 앞에 (.
+                    pass
+            
+            if paren_depth > 0:
+                continue
+
+            if tok in (',',):
+                continue
+            
+            if tok in ('FROM', 'JOIN'):
+                # DELETE FROM 인지 확인해야 함
+                # FROM 바로 앞 토큰(i-1)이 DELETE인지 확인
+                if i > 0:
+                    prev = tokens[i-1].group().upper()
+                    if prev == 'DELETE':
+                        return False # DELETE target, handled elsewhere
+                return True
+                
+            if tok in ('UPDATE', 'INSERT', 'DELETE', 'SELECT', 'SET', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'VALUES'):
+                # 다른 절의 시작을 만나면 소스 테이블이 아님
+                return False
+                
+        return False
+
     for ft in found_tables:
         # NHPT. 스키마 제거
         clean_name = ft['name']
@@ -175,11 +258,12 @@ def extract_table_crud(sql_text, table_ops, source="UNKNOWN"):
             clean_name = clean_name.replace("NHPT.", "")
             
         if not ft['ops']:
-            # 명시적 CRUD 타겟이 아닌 경우 SELECT로 간주 (단, SELECT 키워드가 존재해야 함)
-            # 로그 메시지나 단순 문자열에 테이블명이 포함된 경우 오탐지 방지 (예: "Table insert error")
-            if 'SELECT' in sql_clean: 
+            # 명시적 CRUD 타겟이 아닌 경우
+            # SELECT Source 인지 문맥 체크
+            if is_select_source(ft):
                 table_ops[clean_name].add('SELECT')
-            # else: SELECT 키워드도 없고 CRUD 타겟도 아니면 무시 (단순 문자열로 간주)
+            
+            # 여기서 매칭되지 않으면 (예: SELECT 절의 컬럼, WHERE 절의 컬럼 등) 아무 작업도 부여되지 않음 -> 무시됨.
             
         else:
             # 이미 CRUD 작업이 식별된 경우
@@ -192,7 +276,8 @@ def process_merge_statement(sql_upper, table_ops):
     Source 테이블 등에는 SELECT를 부여합니다.
     """
     # Target Table 추출: MERGE INTO [Table]
-    target_pattern = re.compile(r'MERGE\s+INTO\s+((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)')
+    # Target Table 추출: MERGE INTO [Table]
+    target_pattern = re.compile(r'MERGE\s+INTO\s+((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)', re.DOTALL)
     target_match = target_pattern.search(sql_upper)
     
     target_table = None
@@ -203,10 +288,13 @@ def process_merge_statement(sql_upper, table_ops):
             target_table = target_table.replace("NHPT.", "")
         
         # Target Table Operations
-        if re.search(r'WHEN\s+MATCHED\s+THEN\s+UPDATE', sql_upper):
+        # 줄바꿈 등이 섞여 있을 수 있으므로 re.DOTALL 사용
+        # WHEN MATCHED THEN UPDATE
+        if re.search(r'WHEN\s+MATCHED\s+THEN\s+UPDATE', sql_upper, re.DOTALL):
             table_ops[target_table].add('UPDATE')
         
-        if re.search(r'WHEN\s+NOT\s+MATCHED\s+THEN\s+INSERT', sql_upper):
+        # WHEN NOT MATCHED THEN INSERT
+        if re.search(r'WHEN\s+NOT\s+MATCHED\s+THEN\s+INSERT', sql_upper, re.DOTALL):
             table_ops[target_table].add('INSERT')
             
     # 나머지 테이블 추출 (Source Tables) -> SELECT 취급

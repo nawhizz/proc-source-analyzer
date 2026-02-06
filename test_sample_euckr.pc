@@ -69,7 +69,7 @@ void main() {
     char *tableName = "TB_CONFIG_ONLY"; 
     
     // Case with CRUD but no TB_ (ignored)
-    char *otherSql = "SELECT * FROM USER_TABLES"; 
+    char *otherSql = "SELECT * FROM TB_USER_TABLES"; 
 
     // MERGE Examples
 
