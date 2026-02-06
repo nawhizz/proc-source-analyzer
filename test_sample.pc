@@ -1,0 +1,44 @@
+
+#include <stdio.h>
+#include <string.h>
+
+/*
+ * 프로그램 명 : 테스트 샘플 프로그램
+ */
+
+/****************************************************
+ ATA_SMT_LOG_TABLE INSERT
+****************************************************/
+void main() {
+	EXEC SQL
+		SELECT ATA_ID
+		     , DATE_CLIENT_REQ
+			 , SUBJECT
+		  FROM NHPT_KATK.ATA_SMT_LOG_TABLE
+		 WHERE ATA_ID = :id
+	;
+		 
+	EXEC SQL
+		INSERT /*+ MBBT02143 */ INTO NHPT_KATK.ATA_SMT_LOG_TABLE
+			 ( MT_PR
+			 , MT_REFKEY
+			 , ATA_ID
+			 , DATE_CLIENT_REQ
+			 , SUBJECT
+			 )
+		SELECT NHPT_SMS.SQ_MMT_TRAN_01.NEXTVAL
+		     , NULL
+			 , 'VF'
+			 , :in_ifmb0034_rcv_dd.tr_dt || '100101'
+			 , C.TPL_EXPL
+	      FROM TB_MP_CO_CM_TPLMSTR
+		 WHERE C.ANCTOK_TPL_ID = 'MB0001'
+		   AND C.TPL_CLF_c     = '03'
+		   AND C.UG_YN         = 'Y'
+		;
+	if (Sqlca.sqlcode != 0){
+		batch_db_error("NHPT_KATK.ATA_SMT_LOG_TABLE insert error");
+		str2str(c_rsp_msg, 0, "%s", "ATA_SMT_LOG_TABLE 등록 오류 입니다.");
+		return FALSE;
+	}
+}

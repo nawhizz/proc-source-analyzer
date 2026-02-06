@@ -1,0 +1,14 @@
+<test_nhpt_euckr.pc>
+
+Analysis Report for: test_nhpt_euckr.pc
+Source Desc: 테스트 샘플 프로그램
+Table Name                     | CRUD Operations
+------------------------------------------------------------
+*TB_MP_AAAA                     | SELECT
+*TB_MP_BBBB                     | SELECT
+*TB_MP_MB_MH_APATTCINF          | SELECT
+*TB_MP_MB_MH_GDCFWDGBRK         | SELECT, UPDATE
+*TB_MP_MB_MH_SLCALCUZINF        | SELECT, UPDATE
+*TB_MP_MB_MI_MSTRHST            | SELECT
+*TB_MP_MB_MM_MSTR               | SELECT
+*TB_MP_MB_NH_CDMBCUINF          | SELECT

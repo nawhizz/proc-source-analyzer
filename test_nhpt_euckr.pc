@@ -1,0 +1,100 @@
+
+#include <stdio.h>
+#include <string.h>
+
+/*
+ * 프로그램 명 : 테스트 샘플 프로그램
+ */
+
+void main() {
+   
+    // Dynamic SQL Examples (String Literals)
+    
+    char query[256*100];
+    
+	sprintf(query, " WITH TMP_MH_CDMBCVINF AS (                                                                        \n"
+	               " 	SELECT INTG_MB_NO                                                                              \n"
+	               " 	     , MIN(NB_CU_DT ) AS MB_CU_DT                                                              \n"
+	               " 	  FROM TB_MP_MB_NH_CDMBCUINF                                                                   \n"
+	               " 	 WHERE CD_MB_STS C = '02                                                                       \n"
+	               " 	 GROUP BY INTG_MB_NO                                                                           \n"
+                   " ),                                                                                                \n"
+				   " TMP_MM_MSTR AS (                                                                                  \n"
+				   " 	SELECT B.INTG_MB_NO                                                                            \n"
+				   " 	     , B.MB CU DT                                                                              \n"
+				   " 	     , A.FIR ENT DT AS CUR FIR ENT DT                                                          \n"
+				   " 	  FROM TB_MP_MB_MM_MSTR A                                                                      \n"
+				   " 	     , TMP_MH_CDMBCVINF B                                                                      \n"
+				   " 	 WHERE A.INTG_MB_NO = B.INTG_MB_NO                                                             \n"
+				   " 	   AND A.CHG_USR_ID != 'MBBT06036_1'                                                           \n"
+				   " 	   AND A.MB_STS_C   != '05'                                                                    \n"
+                   " )                                                                                                 \n"
+                   " SELECT B.INTG_MB_NO                                                                               \n"
+                   "      , MB_CU_DT AS TO_FIR_ENT_DT                                                                  \n"
+                   "      , B.CUR_FIR_ENT_DT                                                                           \n"
+                   "      , MIN(A.CHG_ST_DTM) KEEP(DENSE RANK FIRST ORDER BY A.CHG_ST_DTM) AS CHG_ST_DTM               \n"
+                   "      , MIN(A.MB_STS_C) KEEP(DENSE RANK FIRST ORDER BY A.CHG_ST_DTM) AS MB_STS_C                   \n"
+                   "      , MIN(NUL(A.SFS_DFN_DT, 'NULL')) KEEP(DENSE RANK FIRST ORDER BY A.CHG_ST_DTM) AS SFS_DFN_DT  \n"
+                   "   FROM TB_MP_MB_MI_MSTRHST A                                                                      \n"
+                   "       , TMP MM_MSTR        B                                                                      \n"
+                   "   WHERE A.INTG_MB_NO = B.INTG_MB_NO                                                               \n"
+				   "     AND NOT EXISTS (SELECT 'X'                                                                    \n"
+				   "                       FROM TB_MP_AAAA X1                                                          \n"
+				   "                          , TB_MP_BBBB X2                                                          \n"
+				   "                      WHERE X1.ID = X2.ID                                                          \n"
+				   "                        AND A.ID  = X1.ID)                                                         \n"
+                   "   GROUP BY B.INTG_MB_NO                                                                           \n"
+                   "       , B.MB_CU_DT                                                                                \n"
+                   "       , B.CUR_FIR_ENT_DT                                                                            ");
+
+
+    char query2[256*100];
+	
+    sprintf(query2," MERGE INTO NHPT.TB_MP_MB_MH_SLCALCUZINF A    \n"
+                   " USING (                                      \n"
+                   "	SELECT A.SLCL_DT                          \n"
+                   "	     , TRIM(B.RMK) AS RMK                 \n"
+                   "	  FROM NHPT.TB_MP_MB_MH_SLCALCUZINF A     \n"
+                   "	     , NHPT_CC.T_BUSS_DT                  \n"
+                   "	 WHERE A.SLCL DT   = B.SOLAR_DT           \n"
+                   "	   AND A.SLCL DT   >= '%s'                \n"
+                   "	   AND A.DOW_C     IS NOT NULL            \n"
+                   "	   AND A.HLDY_DSC  = '0'                  \n"
+                   "	   AND B.CNTR_CD   = '10'                 \n"
+                   "	   AND B.HLD_YN    = 'Y'                  \n"
+                   " ) B                                          \n"
+                   " ON (A.SLCL_DT = B.SLCL_DT)                   \n"
+                   " WHEN MATCHED THEN UPDATE                     \n"
+                   "  SET A.HLDY_DSC   = '1'                      \n"
+                   "	, A.RMK        = B.RMK                    \n"
+                   , gs_argc_work_dt
+            );
+			
+	char query3[256*100];
+	
+    sprintf(query3," MERGE INTO TB_MP_MB_MH_GDCFWDGBRK A                           \n"
+                   " USING (                                                       \n"
+                   "     SELECT A.DDL_BAS_DT                                       \n"
+                   "          , A.GDC_DS_C                                         \n"
+                   "          , A.INTG_MB_NO                                       \n"
+                   "       FROM TB_MP_MB_MH_GDCFWDGBRK A                           \n"
+                   "          , (SELECT INTG_MB_NO                                 \n"
+                   "                  , MAX(DECODE(TRM_OS_C, '01', '07', '02'))    \n"
+                   "               FROM TB_MP_MB_MH_APATTCINF                      \n"
+                   "              WHERE LS_TRM_YN = 'Y'                            \n"
+                   "              GROUP BY INTG_MB_NO                              \n"
+                   "            ) B                                                \n"
+                   "      WHERE A.INTG_MB_NO = B.INTG_MB_NO(+)                     \n"
+                   "        AND A.DDL_BAS_DT = TO_CHAR(SYSDATE, 'YYYYMMDD')        \n"
+                   "        AND A.GDC_DS_C   = 'XX'                                \n"
+                   "        AND A.PRC_DS_C   = 'A'                                 \n"
+                   "        AND A.FWDG_CHAN_C = '07'                /* RCS    */   \n"
+                   "        AND NVL(B.FWDG_CHAN_C, '02') = '02'     /* 알림톡 */   \n"
+                   " ) B                                                           \n"
+                   " ON (A.INTG_MB_NO = B.INTG_MB_NO                               \n"
+                   " AND A.DDL_BAS_DT = B.DDL_BAS_DT                               \n"
+                   " AND A.GDC_DS_C   = B.GDC_DS_C )                               \n"
+                   " WHEN MATCHED THEN UPDATE                                      \n"
+                   " SET A.FWDG_CHAN_C = '02'                       /* 알림톡 */   \n"
+            );
+}

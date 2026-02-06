@@ -39,56 +39,152 @@ def analyze_file(file_path, encoding='euc-kr'):
         extract_table_crud(sql_block, table_ops, source="STATIC")
 
     # 2. 문자열 리터럴 분석 (동적 쿼리)
-    # 큰따옴표로 묶인 문자열을 찾음
-    string_literal_pattern = re.compile(r'"([^"]*)"')
-
-    for match in string_literal_pattern.finditer(content):
-        sql_string = match.group(1)
-        # 문자열 안에 TB_, ATA_, EM_ 테이블이 있는지 확인
-        if any(prefix in sql_string for prefix in ["TB_", "ATA_", "EM_"]):
-            extract_table_crud(sql_string, table_ops, source="DYNAMIC")
+    # C언어 스타일의 문자열 연결(String Concatenation)을 처리합니다.
+    # 예: "SELECT * " \n " FROM TB_TEST" -> "SELECT *  FROM TB_TEST"
+    
+    # 패턴 설명:
+    # "..." : 첫 번째 문자열 (이스케이프 문자 처리 포함)
+    # (?:\s*"...")* : 공백(줄바꿈 포함) 후 이어지는 문자열들이 0개 이상 반복
+    concat_string_pattern = re.compile(r'("(?:\\[\s\S]|[^"\\])*"(?:\s*"(?:\\[\s\S]|[^"\\])*")*)')
+    
+    for match in concat_string_pattern.finditer(content):
+        full_match = match.group(1)
+        
+        # 연결된 문자열들을 하나로 합치기
+        # 1. 각 "..." 블록을 찾음
+        single_str_pattern = re.compile(r'"((?:\\[\s\S]|[^"\\])*)"')
+        parts = single_str_pattern.findall(full_match)
+        
+        if parts:
+            # 2. 하나의 문자열로 결합 (공백 하나로 구분하여 안전하게 연결)
+            sql_string = " ".join(parts)
+            
+            # 문자열 안에 TB_, ATA_, EM_ 테이블이 있는지 확인
+            if any(prefix in sql_string for prefix in ["TB_", "ATA_", "EM_"]):
+                extract_table_crud(sql_string, table_ops, source="DYNAMIC")
 
     return table_ops, source_desc
 
 def extract_table_crud(sql_text, table_ops, source="UNKNOWN"):
     """
     SQL 텍스트(또는 문자열)에서 TB_, ATA_, EM_ 테이블과 CRUD 키워드를 추출하여 table_ops에 저장합니다.
+    단어 유무만 확인하는 것이 아니라, 문맥(INSERT INTO, UPDATE, FROM 등)을 고려하여
+    정확한 CRUD 작업을 식별합니다.
     """
     # 대문자로 변환하여 분석
     sql_upper = sql_text.upper()
+
+    # 주석 제거 (힌트 처리 및 오탐 방지)
+    # /* ... */ 형태의 주석을 공백으로 교체하여 길이(인덱스) 유지
+    # 단순화: -- 주석은 행 단위 처리가 필요하므로 여기서는 /* */ 만 처리 (User Case 대응)
+    # 정규식: /* 부터 */ 까지 (Non-greedy)
+    sql_clean = re.sub(r'/\*.*?\*/', lambda m: ' ' * len(m.group()), sql_upper, flags=re.DOTALL)
     
-    # MERGE 문 특수 처리
-    if 'MERGE' in sql_upper:
-        process_merge_statement(sql_upper, table_ops)
+    # MERGE 문 특수 처리 (Cleaned SQL 사용)
+    if 'MERGE' in sql_clean:
+        process_merge_statement(sql_clean, table_ops)
         return
 
-    # 일반적인 "Bag of Words" 방식 처리
-    # 테이블 찾기: TB_, ATA_, EM_ 등으로 시작하고 (앞에 스키마명. 이 올 수 있음) 영문자, 숫자, 언더스코어로 구성된 단어
+    # 테이블 패턴 (스키마 포함)
     table_pattern = re.compile(r'\b((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)\b')
-    tables = table_pattern.findall(sql_upper)
     
-    if not tables:
+    # 모든 테이블 등장 위치 찾기 - Clean된 SQL에서 찾음 (주석 내 테이블 무시 효과)
+    found_tables = []
+    for match in table_pattern.finditer(sql_clean):
+        found_tables.append({
+            'name': match.group(1),
+            'start': match.start(),
+            'end': match.end(),
+            'ops': set()
+        })
+    
+    if not found_tables:
         return
 
-    # CRUD 작업 찾기
-    ops = set()
-    if 'SELECT' in sql_upper:
-        ops.add('SELECT')
-    if 'INSERT' in sql_upper:
-        ops.add('INSERT')
-    if 'UPDATE' in sql_upper:
-        ops.add('UPDATE')
-    if 'DELETE' in sql_upper:
-        ops.add('DELETE')
+    # CRUD 타겟 패턴 정의
+    # INSERT INTO Table
+    insert_pattern = re.compile(r'INSERT\s+INTO\s+((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)')
+    # INSERT Columns Pattern: INSERT INTO Table (...)
+    # 괄호 안의 내용을 비글리디 하게 잡되, 줄바꿈 포함
+    insert_columns_pattern = re.compile(r'INSERT\s+INTO\s+[A-Z0-9_.]+\s*\((.*?)\)', re.DOTALL)
     
-    if ops:
-        for table in tables:
-            # NHPT. 스키마 제거
-            if table.startswith("NHPT."):
-                table = table.replace("NHPT.", "")
+    # UPDATE Table
+    update_pattern = re.compile(r'UPDATE\s+((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)')
+    # DELETE [FROM] Table
+    delete_pattern = re.compile(r'DELETE\s+(?:FROM\s+)?((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)')
+
+    # Column Confusion Check: Remove found_tables that are inside INSERT column list
+    valid_tables = []
+    
+    # 1. Find all exclusion zones (INSERT column lists)
+    exclusion_zones = []
+    for match in insert_columns_pattern.finditer(sql_clean):
+        # group(1) has the content inside parens
+        start_idx = match.start(1)
+        end_idx = match.end(1)
+        exclusion_zones.append((start_idx, end_idx))
+        
+    # 2. Filter found_tables
+    for ft in found_tables:
+        is_column = False
+        for (ex_start, ex_end) in exclusion_zones:
+            # If table is completely inside the exclusion zone
+            if ft['start'] >= ex_start and ft['end'] <= ex_end:
+                is_column = True
+                break
+        
+        if not is_column:
+            valid_tables.append(ft)
+    
+    found_tables = valid_tables
+    if not found_tables:
+        return
+
+    # 각 패턴별로 매칭되는 테이블의 위치(span)를 찾아 해당 작업 부여
+    # Note: sql_clean을 사용하여 힌트가 공백 처리된 상태이므로 INSERT ... INTO 매칭 성공
+    def mark_operations(pattern, op_name):
+        for match in pattern.finditer(sql_clean):
+            # 매칭된 그룹(테이블명)의 span
+            try:
+                target_start = match.start(1)
+                target_end = match.end(1)
+                
+                # 발견된 테이블 목록에서 이 위치와 일치하는 항목 찾기
+                for ft in found_tables:
+                    # 완벽히 겹치는지 확인 (같은 위치인지)
+                    if ft['start'] == target_start and ft['end'] == target_end:
+                        ft['ops'].add(op_name)
+            except IndexError:
+                pass # 패턴에 그룹이 없는 경우 무시
+
+    mark_operations(insert_pattern, 'INSERT')
+    mark_operations(update_pattern, 'UPDATE')
+    mark_operations(delete_pattern, 'DELETE')
+
+    # 기본적으로 모든 테이블은 SELECT로 간주하되,
+    # 위에서 INSERT/UPDATE/DELETE로 마킹된 적이 없는 경우에만 SELECT를 추가합니다.
+    # 단, INSERT/UPDATE/DELETE 구문의 타겟이 아니면 모두 조회(SELECT) 용도로 봅니다.
+    # 예: INSERT INTO T1 SELECT * FROM T1;
+    # 첫번째 T1: INSERT 마킹됨
+    # 두번째 T1: 마킹 안됨 -> SELECT 추가
+    
+    for ft in found_tables:
+        # NHPT. 스키마 제거
+        clean_name = ft['name']
+        if clean_name.startswith("NHPT."):
+            clean_name = clean_name.replace("NHPT.", "")
             
-            for op in ops:
-                table_ops[table].add(op)
+        if not ft['ops']:
+            # 명시적 CRUD 타겟이 아닌 경우 SELECT로 간주 (단, SELECT 키워드가 존재해야 함)
+            # 로그 메시지나 단순 문자열에 테이블명이 포함된 경우 오탐지 방지 (예: "Table insert error")
+            if 'SELECT' in sql_clean: 
+                table_ops[clean_name].add('SELECT')
+            # else: SELECT 키워드도 없고 CRUD 타겟도 아니면 무시 (단순 문자열로 간주)
+            
+        else:
+            # 이미 CRUD 작업이 식별된 경우
+            for op in ft['ops']:
+                table_ops[clean_name].add(op)
 
 def process_merge_statement(sql_upper, table_ops):
     """
@@ -114,20 +210,21 @@ def process_merge_statement(sql_upper, table_ops):
             table_ops[target_table].add('INSERT')
             
     # 나머지 테이블 추출 (Source Tables) -> SELECT 취급
-    # 전체 테이블 찾기
+    # 전체 테이블 찾기 (리스트로 반환하여 개수 확인)
     all_table_pattern = re.compile(r'\b((?:[A-Z0-9_]+\.)?(?:TB_|ATA_|EM_)[A-Z0-9_]+)\b')
-    all_tables = set(all_table_pattern.findall(sql_upper))
+    all_tables_list = all_table_pattern.findall(sql_upper)
+    all_tables = set(all_tables_list)
     
-    # Target Table 제외 (Cleaned target table removal might be tricky if original was different)
-    # Careful: We need to remove the raw string found in regex, NOT the cleaned one, 
-    # to correctly subtract from all_tables which contains raw strings.
-    # But wait, all_tables contains strings. 
-    
-    # Let's clean all_tables first? No, we need to exclude the target match string from the source list.
+    # Target Table 제외 로직 개선
+    # Target Table이 SQL 문 내에서 여러 번 등장하면 Source(SELECT)로도 사용된 것으로 간주
     if target_match:
         raw_target_table = target_match.group(1)
+        
+        # Target Table이 목록에 있고, 등장 횟수가 1번뿐이라면 (Target으로만 사용됨) -> SELECT 목록에서 제외
+        # 만약 2번 이상 등장하면 (Target + Source) -> SELECT 목록에 유지
         if raw_target_table in all_tables:
-            all_tables.remove(raw_target_table)
+            if all_tables_list.count(raw_target_table) == 1:
+                all_tables.remove(raw_target_table)
         
     # 나머지는 모두 SELECT (USING 구문 등)
     for table in all_tables:
