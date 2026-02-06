@@ -1,4 +1,0 @@
-
-void main() {
-    EXEC SQL SELECT * FROM TB_ROOT;
-}
