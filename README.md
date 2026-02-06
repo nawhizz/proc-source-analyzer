@@ -1,4 +1,4 @@
-# Pro*C Source Analyzer
+# Pro*C Source Analyzer (proc_analyzer.py)
 
 Pro*C 소스 코드(`*.pc`)를 분석하여 사용된 **테이블(TB_*)**과 해당 테이블에 수행된 **CRUD 작업(Select, Insert, Update, Delete)**을 추출하는 파이썬 도구입니다.
 
@@ -147,3 +147,40 @@ TB_USER                        | SELECT, UPDATE
 ...
 ============================================================
 ```
+
+
+# Pro*C 함수 분리 도구 (split_proc_functions.py)
+
+하나의 거대한 Pro*C 공통 모듈 파일(예: `SC_MOG_COMMON.pc`)을 개별 함수 단위의 파일로 분리해주는 도구입니다.
+
+## 1. 주요 기능
+- **자동 분리**: 원본 파일에서 C 함수 정의를 찾아 개별 `.pc` 파일로 저장합니다.
+- **주석 포함**: 함수 정의 바로 위에 있는 설명 주석(`/* ... */`)을 함께 추출합니다.
+- **공통 헤더 제외**: 파일 상단의 공통 선언부(Preamble)는 제외하고, 순수 함수 내용만 추출합니다.
+- **오탐지 필터**: 함수 파싱 시 `INSERT`, `if` 등 SQL 구문이나 제어문을 함수로 오인하지 않도록 필터링합니다.
+
+## 2. 사용 방법
+
+```bash
+python split_proc_functions.py -f <원본파일> [-c <인코딩>]
+```
+
+- `-f, --file`: (필수) 분리할 대상 Pro*C 파일 경로.
+- `-c, --encoding`: (선택) 파일 인코딩 (기본값: `euc-kr`).
+
+## 3. 실행 예시
+
+**기본 실행 (euc-kr):**
+```bash
+python split_proc_functions.py -f SC_MOG_COMMON.pc
+```
+명령을 실행하면 원본 파일명과 동일한 폴더(`SC_MOG_COMMON`)가 생성되고, 그 안에 `CF_START_SERVICE.pc`, `CF_END_SERVICE.pc` 등의 파일이 생성됩니다.
+
+**UTF-8 파일 실행:**
+```bash
+python split_proc_functions.py -f MyFunctions.pc -c utf-8
+```
+
+## 4. 주의 사항
+- 생성되는 파일의 인코딩은 원본 파일의 인코딩 설정(`-c`)을 따릅니다.
+- `if (...) { ... }` 제어문이나 `EXEC SQL ...` 블록은 함수로 인식하지 않습니다.

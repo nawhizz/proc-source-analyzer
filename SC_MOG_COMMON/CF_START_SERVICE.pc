@@ -1,0 +1,179 @@
+/*------------------------------------------------------------------------------
+ * FUNCTION ID : CF_START_SERVICE(버퍼크기, 트랜잭션, 서비스화일명, 플래그)
+ * 기       능 : 전역변수 초기화, 버퍼 재할당, 세션정보 수신
+ * 버 퍼 크 기 : 전송버퍼(tranbuf) 재할당할 크기
+ * 트랜잭션처리: TX_XA  -> 전역 트랜잭션 관리
+ *               TX_NXA ->      트랜잭션 관리 안함
+ * 플   래  그 : 0      -> 전역변수 초기화, 버퍼 재할당, 세션정보 수신
+ *               1      -> 전역변수 초기화, 버퍼 재할당
+ * 반   환  값 : 0      -> 정상 , 그외 오류코드
+ *----------------------------------------------------------------------------*/
+int CF_START_SERVICE(int buff_size, int txtype, char *file_name, int flag)
+{
+    /*--------------------------------------------------------------------------
+     * 변수 선언.
+     *------------------------------------------------------------------------*/
+    char *ptrfile;
+    /*--------------------------------------------------------------------------
+     * 전역변수 초기화.
+     *------------------------------------------------------------------------*/
+    INITSTRU(evar                 );                   /* 전역변수 초기화     */
+    CHARTOVAR(evar.yn_user_err,"N");
+    /*--------------------------------------------------------------------------
+     * 전역변수 설정.
+     *------------------------------------------------------------------------*/
+    evar.result = FAIL;                        /* 처리결과 Default로 FAIL설정 */
+    evar.txtype = txtype;                      /* Tx Type                     */
+
+    ptrfile = strrchr(file_name,'_')+1;
+    SUBSTR(evar.id_program.arr, ptrfile, 0, strlen(ptrfile)-3);
+    evar.id_program.len = strlen(evar.id_program.arr); /* 프로그램명 'MO_'제외*/
+    time(&sec);                                        /* 타임설정            */
+    t = localtime(&sec);                               /* 현 SYSTEM DATETIME  */
+    sprintf(evar.tm_start_service.arr,"%02d%02d%02d",t->tm_hour,t->tm_min,t->tm_sec);
+    evar.tm_start_service.len = strlen(evar.tm_start_service.arr);
+    /*--------------------------------------------------------------------------
+     * Global Transaction(전역 트랜잭션 관련) 처리.
+     *------------------------------------------------------------------------*/
+    int     txret = 0;                                 /* 트랜잭션 변수 선언  */
+    TXINFO  txinfo;                                    /* 트랜잭션 정보 선언  */
+    txret   = tx_info((TXINFO *)&txinfo);
+    if (txret == 1 && evar.txtype == TX_XA)            /* 재 XA모드 설정시    */
+    {
+        tx_rollback();
+        return(FAIL);
+    }
+    if (evar.txtype == TX_XA)
+    {
+        txret = tx_begin();                            /* 전역 트랜잭션 시작  */
+        if (txret < 0)
+        {
+            return(FAIL);
+        };
+    }
+    /*--------------------------------------------------------------------------
+     * FDL Buffer 재할당 작업.
+     *------------------------------------------------------------------------*/
+    TP_REALLOC(tranbuf, buff_size);
+    if (evar.fb_error > 0) /* Tmax Buffer 할당 오류 시 처리 */
+    {
+        return(FAIL);
+    }
+    /*--------------------------------------------------------------------------
+     * 서비스모드 부분에 해당하는 TMAX 버퍼의 값을 변수로 가져오기.
+     *------------------------------------------------------------------------*/
+    FB_GET_V(tranbuf, INF001, evar.gbn_service , "서비스모드  ");
+    if (evar.fb_error > 0) /* Tmax Buffer 할당 오류 시 처리 */
+    {
+
+        return(FAIL);
+    }
+    /*--------------------------------------------------------------------------
+     * 플래그 0인 경우 세션정보 수신.
+     *------------------------------------------------------------------------*/
+    if (flag == 0)
+    {
+        /*----------------------------------------------------------------------
+         * 세션부분에 해당하는 TMAX 버퍼의 값을 변수로 가져오기.
+         *--------------------------------------------------------------------*/
+        FB_GET_V(tranbuf, INF002, evar.id_user          , "사용자ID                                           ");
+        FB_GET_V(tranbuf, INF002, evar.nm_user          , "성명                                               ");
+        FB_GET_I(tranbuf, INF002, evar.cd_samuso_i      , "사무소코드                                         ");
+        FB_GET_V(tranbuf, INF002, evar.cd_samuso        , "사무소코드                                         ");
+        FB_GET_V(tranbuf, INF002, evar.nm_samuso        , "사무소이름                                         ");
+        FB_GET_V(tranbuf, INF002, evar.cd_dept          , "부서코드                                           ");
+        FB_GET_V(tranbuf, INF002, evar.nm_dept          , "부서명                                             ");
+        FB_GET_V(tranbuf, INF002, evar.cd_jikgeub       , "직급코드                                           ");
+        FB_GET_V(tranbuf, INF002, evar.cd_jikmyung      , "직명코드                                           ");
+        FB_GET_V(tranbuf, INF002, evar.address_ip       , "사용자 IP                                          ");
+        FB_GET_C(tranbuf, INF002, evar.gbn_user         , "사용자구분(농협,슈퍼바이저,지사,가맹점,체인점,농가)");
+        FB_GET_V(tranbuf, INF002, evar.cd_whouse        , "창고코드                                           ");
+        FB_GET_V(tranbuf, INF002, evar.cd_branch        , "영업소(지점)코드                                   ");
+        FB_GET_C(tranbuf, INF002, evar.gbn_login        , "로그인구분                                         ");
+
+        FB_GET_V(tranbuf, INF003, evar.jsp_program      , "호출한 JSP 프로그램 ID                             ");
+        FB_GET_I(tranbuf, INF004, evar.seq_jsp_program  , "호출한 JSP 프로그램 SEQ                            ");
+        FB_GET_V(tranbuf, INF010, evar.dyn_sql          , "Dynamic SQL(from JSP)                              ");
+
+/*
+        FB_GET_V(tranbuf, INF002, evar.no_sawon        , "사원번호            ");
+        FB_GET_V(tranbuf, INF002, evar.nm_sawon        , "성명                ");
+        FB_GET_V(tranbuf, INF002, evar.code_company    , "회사코드            ");
+        FB_GET_V(tranbuf, INF002, evar.code_samuso     , "사무소코드          ");
+        FB_GET_V(tranbuf, INF002, evar.nm_samuso       , "사무소명            ");
+        FB_GET_V(tranbuf, INF002, evar.type_samuso     , "사무소형태          ");
+        FB_GET_V(tranbuf, INF002, evar.code_samuso_jib , "기본 집계사무소코드 ");
+        FB_GET_V(tranbuf, INF002, evar.code_buseo      , "부서코드            ");
+        FB_GET_V(tranbuf, INF002, evar.nm_buseo        , "부서명              ");
+        FB_GET_V(tranbuf, INF002, evar.gbn_jikwon      , "직원구분            ");
+        FB_GET_V(tranbuf, INF002, evar.code_jikgeub    , "직급코드            ");
+        FB_GET_V(tranbuf, INF002, evar.code_jikmyung   , "직명코드            ");
+        FB_GET_V(tranbuf, INF002, evar.dt_pay          , "최종급여지급일      ");
+        FB_GET_V(tranbuf, INF002, evar.gbn_pay         , "급여지급구분        ");
+        FB_GET_V(tranbuf, INF002, evar.nm_pay          , "급여구분명          ");
+        FB_GET_V(tranbuf, INF002, evar.code_samuso_ji  , "지급사무소코드      ");
+        FB_GET_V(tranbuf, INF002, evar.code_samuso_pa  , "근무(파견)사무소코드");
+        FB_GET_V(tranbuf, INF002, evar.auth_hr         , "인사권한            ");
+        FB_GET_V(tranbuf, INF002, evar.auth_py         , "급여권한            ");
+        FB_GET_V(tranbuf, INF002, evar.auth_ac         , "회계권한            ");
+        FB_GET_V(tranbuf, INF002, evar.auth_mi         , "경영정보권한        ");
+        FB_GET_V(tranbuf, INF002, evar.auth_us         , "시스템권한          ");
+        FB_GET_V(tranbuf, INF002, evar.auth_sd         , "영업관리권한        ");
+        FB_GET_V(tranbuf, INF002, evar.auth_pp         , "생산관리권한        ");
+        FB_GET_V(tranbuf, INF002, evar.auth_ec         , "경제공통권한        ");
+        FB_GET_V(tranbuf, INF002, evar.auth_am         , "감사관리권한        ");
+        FB_GET_V(tranbuf, INF002, evar.yakjeong        , "약정내역            ");
+        FB_GET_V(tranbuf, INF002, evar.ip_addr         , "IP 주소             ");
+
+        FB_GET_I(tranbuf, INF004, evar.cur_page        , "현재PAGE            ");
+        FB_GET_I(tranbuf, INF004, evar.cnt_row_page    , "PAGE당 건수         ");
+        FB_GET_V(tranbuf, INF005, evar.code_system     , "현재실행업무        ");
+*/
+        /*----------------------------------------------------------------------
+         * INF011 ~ INF020 까지는 Dynamic SQL 관련 버퍼
+         *--------------------------------------------------------------------*/
+/*
+        FB_GET_C(tranbuf, INF019, evar.commit_yn       , "Commit 여부         ");
+        FB_GET_V(tranbuf, INF020, evar.dyn_sql         , "Dynamic SQL         ");
+*/
+
+        if (evar.cur_page == 0 && evar.cnt_row_page == 0)
+        {
+            evar.cur_page = 1;
+            evar.cnt_row_page = 99999;
+        }
+        if (evar.fb_error > 0)                /* Tmax Buffer Get 오류 시 처리 */
+        {
+            return(FAIL);
+        }
+
+        if( CF_CHECK_TONGJAE() == FAIL )
+        {
+            CHARTOVAR(evar.yn_user_err,"Y");
+            sprintf(evar.msg.arr,"전산시스템의 안정적인 운영을 위해 점검 중에 있습니다.\n다소 불편하시더라도 양해해 주시고 빠른 복구를 위해\n최선을 다 하겠습니다.");
+            evar.msg.len = strlen(evar.msg.arr);
+            return(FAIL);
+        }
+    }
+    /*--------------------------------------------------------------------------
+     * 기본로그 출력.
+     *------------------------------------------------------------------------*/
+    if (tpextsvcname((char *)tranbuf, evar.svc_program.arr) < 0)
+    {
+        CHARTOVAR(evar.yn_user_err,"Y");
+        sprintf(evar.msg.arr,"서비스명 가져오기 중 오류!!! 담당자에게 문의하세요.");
+        evar.msg.len = strlen(evar.msg.arr);
+        return(FAIL);
+    }
+    printf("\n\n\n [%s] 서비스가 시작되었습니다. (시작시간 :: [%s], 서비스모드 :: [%s], 호출 JSP :: [%s]\n\n", evar.svc_program.arr, evar.tm_start_service.arr
+                                                                                                             , evar.gbn_service.arr, evar.jsp_program.arr         );
+    /*--------------------------------------------------------------------------
+     * 로그 Insert.
+     *------------------------------------------------------------------------*/
+    CF_SAVE_LOG_START();
+    
+    /*--------------------------------------------------------------------------
+     * 처리결과 SUCCESS 리턴.
+     *------------------------------------------------------------------------*/
+    return(SUCCESS);
+}

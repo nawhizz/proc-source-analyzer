@@ -1,0 +1,485 @@
+/*------------------------------------------------------------------------------
+ * 주시스템명 : 목우촌 종합관리 시스템
+ * 서  버  명 :
+ * 서  비  명 : SC_MOG_BUNGAE
+ * 업무  구분 : 공통
+ * 업무  단위 :
+ * 프로그램명 : 표준함수
+ * 서브  함수 : 분개 함수              ---> fun_ec_acc_if()
+ * 작  성  자 : 조규복
+ * 작  성  일 : 2007.05.30
+  ----------------------------------------------------------------------------
+ | 수  정  자  | 수  정  일 |           수     정     내     용              |
+  ----------------------------------------------------------------------------
+ |  조 규 복   | 2007.05.30 | 목우촌 종합관리 시스템에 맞게 수정             |
+ *----------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------
+ * Head File Inclue    선언부.
+ *----------------------------------------------------------------------------*/
+EXEC SQL INCLUDE    "/userdir/nhimog/include/common_main.h";   /* 공통 메인 Head File */
+/*------------------------------------------------------------------------------
+ * 사용자 Define       선언부.
+ *----------------------------------------------------------------------------*/
+struct   tm *t;                                                       /* Time.h                   */
+time_t   sec;                                                         /* Time.h                   */
+
+/*------------------------------------------------------------------------------------------------*
+--   1. Procedure ID     : sp_acc_if            - 회계인터페이스
+--   2. Input Parameter  : p_gbn_eommu          - 업무구분
+--                         p_id_user            - 사용자ID
+--                         p_key_value1         - 인터페이스대상Key Value1
+--                         p_key_value2         - 인터페이스대상Key Value2
+--                         p_key_value3         - 인터페이스대상Key Value3
+--                         p_key_value4         - 인터페이스대상Key Value4
+--                         p_key_value5         - 인터페이스대상Key Value5
+--                         p_key_value6         - 인터페이스대상Key Value6
+--   3. Output Parameter : p_rtn_yn             - 처리결과:실패(N),성공(Y)
+--                         p_rtn_msg            - 처리 메세지:에러메세지,전표번호
+--   4. Input  Table     : tb_ec_slip_log_m     - 전표로그공통
+--                         tb_ec_slip_log_d     - 전표로그상세
+--   5. 작 성 자         : 조규복
+--   6. 작성일자         : 2007-05-30
+--   7. Remark 사항
+--      1) 회계인터페이스되는 업무에 대한 처리를 해당 페키지내에서 처리한다.
+--   8. 수 정 내 용
+--      1)
+ *------------------------------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------*
+--  업무ID
+--  온라인 계리조립번호와 일치  ==> 제품 생산(071) 
+--  업무ID
+--  p_key_id_upmu ==> "JT"로 고정
+ *------------------------------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------*
+ * FUNCTION ID : fun_ec_acc_if(사무소    , 사용자 ID   , 회계일자 , 업무구분NO, 업무처리구분,     *
+                               작업일자  , 작업일련번호, 업무ID   , 키값4     , 키값5       ,     *
+ *                             키값6     , 처리결과1   , 처리결과2                  )             *
+ * 기       능 : 회계분계 함수 호출                                                               *
+ * 키       값 : 1: 작업일자, 2: 작업번호, 3: 사무소                                              *
+ * 반   환  값 : p_rtn_yn  처리결과:실패(N),성공(Y)                                               *
+ * 반   환  값 : p_rtn_yn  처리결과:실패(N),성공(Y)                                               *
+ *               p_rtn_msg            - 처리 메세지:에러메세지,전표번호                           *
+ * Function위치: ($HOME)/lib/SC_MOG_COMMON.pc                                                     *
+ *------------------------------------------------------------------------------------------------*/
+int fun_ec_acc_if( char *p_samuso
+                  ,char *p_id_user
+                  ,char *p_dt_hoegye
+                  ,char *p_no_upmu
+                  ,char *p_gbn_georae
+                  ,char *p_key_dt_work
+                  ,char *p_key_no_work
+                  ,char *p_key_id_upmu
+                  ,char *p_key_value4
+                  ,char *p_key_value5
+                  ,char *p_key_value6
+                  ,char *p_rtn_yn    
+                  ,char *p_rtn_msg
+                 )
+{
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    EXEC SQL BEGIN DECLARE SECTION;        
+         char      out_p_rtn_yn [ 1+1];                               /* 처리결과                 */
+         char      out_p_rtn_msg[100+1];                              /* 처리 메세지              */
+         
+         int       i_gbn_upmu               = 0;                      /* 업무번호                 */
+
+    EXEC SQL END   DECLARE SECTION;
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    INITCHAR(out_p_rtn_yn                     );                      /* 처리결과                 */
+    INITCHAR(out_p_rtn_msg                    );                      /* 처리 메세지              */
+    /*--------------------------------------------------------------------------------------------*/
+    /* 업무단위 호출.                                                                             */
+    /*--------------------------------------------------------------------------------------------*/
+   i_gbn_upmu =  atoi(p_no_upmu); 
+   printf("\n i_gbn_upmu => [%s]\n", p_no_upmu);
+
+    switch (i_gbn_upmu)
+    {
+        case    100 :  
+                        break;
+        case    101 :
+                        break;
+        case    102 :
+                        break;
+	    default     :
+		             /* 0. 통합사무관리 회계 temp테이블 채번을 한다                     */
+		             /* 1. 통합사무관리 회계 공통 temp테이블에 등록한다                 */
+		             /* 2. 통합사무관리 회계 상세 temp테이블에 등록한다                 */
+		             /* 3. 통합사무관리 회계 본테이블에 등록하는 서비스를 호출한다      */
+		             /* 4. 목우촌종합 회계 공통 테이블에 등록한다                       */
+		             /* 5. 목우촌종합 회계 상세 테이블에 등록한다                       */
+                     /* 6. 통합사무관리 회계 관리항목에 등록한다                        */
+   printf("\n ========================호출 시작===========================================\n");
+   printf("\n p_samuso => [%s]\n", p_samuso);
+   printf("\n p_id_user => [%s]\n", p_id_user);
+   printf("\n p_dt_hoegye => [%s]\n", p_dt_hoegye);
+   printf("\n p_no_upmu => [%s]\n", p_no_upmu);
+   printf("\n p_gbn_georae => [%s]\n", p_gbn_georae);
+   printf("\n p_key_dt_work => [%s]\n", p_key_dt_work);
+   printf("\n p_key_no_work => [%s]\n", p_key_no_work);
+   printf("\n p_key_id_upmu => [%s]\n", p_key_id_upmu);
+   printf("\n p_rtn_yn => [%s]\n", p_rtn_yn);
+   printf("\n p_rtn_msg => [%s]\n", p_rtn_msg);
+   printf("\n ========================호출  끝===========================================\n");
+                         sp_acc_default(  p_samuso             /* 사무소                            */
+                                         ,p_id_user            /* 작업자ID                          */
+                                         ,p_dt_hoegye          /* 회계일자                          */
+                                         ,p_no_upmu            /* 업무번호                          */
+                     		             ,p_gbn_georae         /* 거래구분(1                        */
+                     		             ,p_key_dt_work        /* 작업일자 (전표키)                 */
+                     		             ,p_key_no_work        /* 작업번호 (전표키)                 */
+                     		             ,p_key_id_upmu        /* 업무ID    ("PP"로 고정)           */
+                     		             ,p_rtn_yn             /* 처리결과:실패(N), 성공(Y)         */
+                     		             ,p_rtn_msg            /* 처리메세지 : 에러메세지, 전표번호 */
+                     		            );                      
+
+    }
+
+    return(SUCCESS);
+}
+
+/*------------------------------------------------------------------------------------------------*
+ * FUNCTION ID : sf_us_number_exist(회사코드, 시스템코드, 구분번호,사무소, 회계일자, '', '', 반환값)*
+ * 기       능 : 채번테이블체크                                                                   *
+ * 반   환  값 : p_rtn_yn  처리결과:실패(N),성공(Y)                                               *
+ * Function위치: ($HOME)/lib/SC_MOG_COMMON.pc                                                     *
+ *------------------------------------------------------------------------------------------------*/
+ int sf_us_number_exist ( char *p_cd_company
+                         ,char *p_cd_system
+                         ,char *p_gbn_no
+                         ,char *p_det_number1  /*사무소            */                    
+                         ,char *p_det_number2  /*회계일자 (전표키) */               
+                         ,char *p_det_number3                         
+                         ,char *p_det_number4                  
+                         ,char *p_rtn_yn)
+{
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    EXEC SQL BEGIN DECLARE SECTION;        
+         char      out_p_no      [ 5+1];                              
+
+    EXEC SQL END   DECLARE SECTION;
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    INITCHAR(out_p_no                 );                              /* 처리결과                 */
+    /*--------------------------------------------------------------------------------------------*/
+    /* 업무단위 호출.                                                                             */
+    /*--------------------------------------------------------------------------------------------*/
+   printf("\n ========================sf_us_number_exist 시작===========================================\n");
+   printf("\n cd_company => [%s]\n", p_cd_company);
+   printf("\n cd_system => [%s]\n", p_cd_system);
+   printf("\n gbn_number => [%s]\n", p_gbn_no);
+   printf("\n det_number1 => [%s]\n", p_det_number1);
+   printf("\n det_number2 => [%s]\n", p_det_number2);
+   printf("\n det_number3 => [%s]\n", p_det_number3);
+   printf("\n det_number4 => [%s]\n", p_det_number4);
+   printf("\n ========================sf_us_number_exist 끝 ===========================================\n");
+    EXEC SQL
+        SELECT 1
+        INTO :out_p_no
+          FROM tb_us_number
+         WHERE code_company = :p_cd_company
+           AND code_system  = :p_cd_system
+           AND gbn_number   = :p_gbn_no
+           AND det_number1  = NVL(:p_det_number1,' ')
+           AND det_number2  = NVL(:p_det_number2,' ')
+           AND det_number3  = NVL(:p_det_number3,' ')
+           AND det_number4  = NVL(:p_det_number4,' ')
+        ;
+        if (SQL_CODE != SQL_OK) {
+            CF_SET_ERROR_MSG("CURSOR Open Error", __FILE__, __LINE__);
+            INTLOOK(__FILE__,"채번테이블 확인 중 오류가 발생하였습니다   \n",SQL_CODE );
+            return(FAIL);
+        }
+        
+        strcpy(p_rtn_yn, "Y") ;
+
+    return(SUCCESS);
+}
+
+/*------------------------------------------------------------------------------------------------*
+ * FUNCTION ID : sp_ec_getnumber(회사코드, 시스템코드, 구분번호, 작업자, 사무소, 회계일자,'', '', 반환값)*
+ * 기       능 : 채번                                                                             *
+ * 반   환  값 : p_rtn_yn  처리결과:채번번호                                                      *
+ * Function위치: ($HOME)/lib/SC_MOG_COMMON.pc                                                     *
+ *------------------------------------------------------------------------------------------------*/
+ int sp_ec_getnumber ( char *p_cd_company   /*회사                           */
+                      ,char *p_cd_system    /*시스템코드                     */    
+                      ,char *p_gbn_no       /*구분번호                       */  
+                      ,char *p_id_oper      /*작업자                         */
+                      ,char *p_det_number1  /*사무소                         */
+                      ,char *p_det_number2  /*회계일자 (전표키)              */  
+                      ,char *p_det_number3  /*                               */
+                      ,char *p_det_number4  /*                               */
+                      ,char *p_rtn_msg      /*처리결과:실패(N), 성공(Y)      */  
+                      )                     
+{
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    EXEC SQL BEGIN DECLARE SECTION;        
+         char      out_p_no      [10+1];                              
+         char      out_p_rtn_gbn [ 1+1];
+         char      p_rtn_yn      [10+1];                              
+         char      v_rtn_number  [17+1];
+         char      cd_company    [ 2+1];
+         char      cd_system     [ 2+1];
+         char      gbn_number    [ 2+1];
+         char      det_number1   [10+1];
+         char      det_number2   [10+1];
+         char      det_number3   [10+1];
+         char      det_number4   [10+1];
+         int       no_seq           =0 ;
+         char      id_upt        [10+1];
+         char      dtm_upt       [20+1];
+
+         int       v_return      =    0;
+    EXEC SQL END   DECLARE SECTION;
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    INITCHAR(out_p_no                 );                              /* 처리결과                 */
+    INITCHAR(out_p_rtn_gbn            );                              /* 처리결과                 */
+
+    INITCHAR(v_rtn_number             );                              
+    
+    INITCHAR(cd_company               );                              
+    INITCHAR(cd_system                );                              
+    INITCHAR(gbn_number               );                              
+    INITCHAR(det_number1              );                              
+    INITCHAR(det_number2              );                              
+    INITCHAR(det_number3              );                              
+    INITCHAR(det_number4              );                              
+    INITCHAR(id_upt                   );                              
+    INITCHAR(dtm_upt                  );                              
+    /*--------------------------------------------------------------------------------------------*/
+    /* 업무단위 호출.                                                                             */
+    /*--------------------------------------------------------------------------------------------*/
+   printf("\n ========================sp_ec_getnumber 시작===========================================\n");
+   printf("\n cd_company  => [%s]\n", p_cd_company);
+   printf("\n cd_system   => [%s]\n", p_cd_system);
+   printf("\n gbn_number  => [%s]\n", p_gbn_no     );
+   printf("\n det_number1 => [%s]\n", p_det_number1);
+   printf("\n det_number2 => [%s]\n", p_det_number2);
+   printf("\n det_number3 => [%s]\n", p_det_number3);
+   printf("\n det_number4 => [%s]\n", p_det_number4);
+   printf("\n ========================sp_ec_getnumber 끝 ===========================================\n");
+
+    /*--------------------------------------------------------------------------------------------*/
+    /*                                                                                            */
+    /*--------------------------------------------------------------------------------------------*/
+   sf_us_number_exist( p_cd_company , p_cd_system  , p_gbn_no     , p_det_number1
+                                  ,p_det_number2, p_det_number3, p_det_number4, p_rtn_yn); 
+
+    if (strcmp(p_rtn_yn, "Y") == 0 )
+    {
+      EXEC SQL
+         SELECT *
+          INTO  :cd_company
+               ,:cd_system
+               ,:gbn_number
+               ,:det_number1
+               ,:det_number2
+               ,:det_number3
+               ,:det_number4
+               ,:no_seq
+               ,:id_upt
+               ,:dtm_upt
+          FROM tb_us_number
+         WHERE
+               code_company = :p_cd_company
+           AND code_system  = :p_cd_system
+           AND gbn_number   = :p_gbn_no
+           AND det_number1  = NVL(:p_det_number1, ' ')
+           AND det_number2  = NVL(:p_det_number2, ' ')
+           AND det_number3  = NVL(:p_det_number3, ' ')
+           AND det_number4  = NVL(:p_det_number4, ' ')
+        ;
+        if (SQL_CODE != SQL_OK) {
+            CF_SET_ERROR_MSG("CURSOR Open Error", __FILE__, __LINE__);
+            INTLOOK(__FILE__,"채번테이블 확인 중 오류가 발생하였습니다   \n",SQL_CODE );
+            return(FAIL);
+        }
+   } else
+   {
+   }
+    EXEC SQL CALL sp_us_getnumber( :p_cd_company
+                                        ,:p_cd_system
+                                        ,:p_gbn_no
+                                        ,:p_det_number1
+                                        ,:p_det_number2
+                                        ,:p_det_number3
+                                        ,:p_det_number4
+                                        ,:p_id_oper
+                                        ,:v_rtn_number
+                                       );
+    if(SQL_CODE != SQL_OK&&SQL_CODE!=-1405)
+    {
+        INTLOOK(__FILE__,"프로시져 MSG:",SQL_CODE);
+
+        CF_SET_ERROR_MSG("회계전표채번시 오류 발생 ", __FILE__, __LINE__);
+        return (FAIL);
+    }
+
+    
+    strcpy(p_rtn_msg, v_rtn_number); 
+   printf("\n v_rtn_number => [%s]\n", v_rtn_number);
+
+    return(SUCCESS);
+}
+
+/*------------------------------------------------------------------------------------------------*
+ * 회계관리임시 관리항목테이블                                                                    *
+ * FUNCTION ID : sp_set_item_temp(사무소코드, 회계일자, 일련번호)                                 *
+ * 기       능 : 회계관리항목에 저장                                                              *
+ * 반   환  값 :                                                                                  *
+ * Function위치: ($HOME)/lib/SC_MOG_COMMON.pc                                                     *
+ *------------------------------------------------------------------------------------------------*/ 
+ int sp_set_item_temp ( char *p_cd_samuso    /*회사                           */
+                       ,char *p_dt_acct      /*시스템코드                     */    
+                       ,char *p_seq_acct     /*구분번호                       */  
+                      )                     
+{
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    EXEC SQL BEGIN DECLARE SECTION;        
+         int       v_return      =    0;
+    EXEC SQL END   DECLARE SECTION;
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    /*--------------------------------------------------------------------------------------------*/
+    /* 업무단위 호출.                                                                             */
+    /*--------------------------------------------------------------------------------------------*/
+   printf("\n ========================sp_set_item_temp 시작===========================================\n");
+   printf("\n p_cd_samuso  => [%s]\n", p_cd_samuso);
+   printf("\n p_dt_acct    => [%s]\n", p_dt_acct  );
+   printf("\n p_seq_acct   => [%s]\n", p_seq_acct );
+   printf("\n ========================sp_set_item_temp 끝 ===========================================\n");
+
+    /*--------------------------------------------------------------------------------------------*/
+    /*                                                                                            */
+    /*--------------------------------------------------------------------------------------------*/
+    EXEC SQL
+    INSERT INTO TB_AC_SLIP_ITEM_TEMP (
+                                              CODE_COMPANY
+                                             ,NO_SLIPD
+                                             ,SEQ_ITEM
+                                             ,CODE_ITEM
+                                             ,DATA_ITEM
+                                             ,NM_DATA_ITEM
+                                             ,YN_PILSU
+                                             ,YN_PRINT
+                                           )
+        SELECT SLI.CODE_COMPANY CODE_COMPANY,
+               SLI.NOD_ACCT     NO_SLIPD    ,    /*--SLI.NOD_ACCT, V_NO_SLIP_9999||SLI.SEQNO_ACCT*/
+               ACC.NO_SEQ       SEQ_ITEM    ,
+               ACC.CODE_ITEM    CODE_ITEM   ,
+               DECODE( ACC.CODE_ITEM, '001', SLI.CODE_SAMU_TABAL ,       /*--타발점사무소코드   */
+                                      '002', SLI.CODE_CUST       ,       /*--거래처코드         */ 
+                                      '003', SLI.CODE_BNK_CGYEJWA,       /*--거래처계좌은행코드 */
+                                      '004', SLI.NO_GYEJWA_CUST  ,       /*--거래처계좌번호     */
+                                      '005', SLI.NM_CGYEJWA_SIL  ,       /*--거래처계좌실명     */
+                                      '006', SLI.GBN_CHULGEUM    ,       /*--출금               */
+                                      '007', SLI.CODE_BANK       ,       /*--은행               */
+                                      '008', SLI.NO_GYEJWA       ,       /*--계좌번호           */
+                                      '009', SLI.NO_CARD         ,       /*--신용카드번호       */
+                                      '010', SLI.GBN_GIBU        ,       /*--기부구분           */
+                                      '011', SLI.GBN_SEMU        ,       /*--세무구분           */
+                                      '012', SLI.GBN_PROOF       ,       /*--증빙종류           */
+                                      '013', SLI.GBN_GWASE       ,       /*--과세구분           */
+                                      '014', SLI.DT_GEORAE       ,       /*--거래일자           */
+                                      '015', SLI.AMT_GONGGEUB    ,       /*--공급가액           */
+                                      '016', SLI.AMT_TAX         ,       /*--세액               */
+                                      '017', SLI.AMT_JOJUNG      ,       /*--조정금액           */
+                                      '018', SLI.AMT_TOTAL       ,       /*--합계금액           */
+                                      '019', SLI.DT_MANGI        ,       /*--만기일자           */ 
+                                      '020', SLI.NO_SAWON        ,       /*--사원               */
+                                      '021', SLI.CODE_BUSEO      ,       /*--부서코드           */
+                                      '022', SLI.NO_MOSEON       ,       /*--모선번호           */
+                                      '023', SLI.NM_MOSEON       ,       /*--모선명             */
+                                      '024', SLI.CODE_PUMMOK     ,       /*--품목코드           */
+                                      '025', SLI.NM_PUMMOK       ,       /*--품명               */ 
+                                      '027', SLI.AMT_JAN         ,       /*--잔액               */
+                                      '028', SLI.DAY_DATE        ,       /*--일수               */
+                                      '029', SLI.RATE_HWAN       ,       /*--환율               */
+                                      '030', SLI.CODE_MONEY      ,       /*--통화코드           */
+                                      '031', SLI.AMT_YECHI_IJA   ,       /*--예치금이자         */
+                                      '032', SLI.AMT_BONGSARYO   ,       /*--봉사료             */
+                                      '033', SLI.NO_CHAIP_GYEJWA ,       /*--차입계좌번호       */
+                                      '035', '비고'              ,       /*--비고               */
+                                      '036', SLI.CODE_YAKJEONG   ,       /*--약정코드           */
+                                      NULL
+                      ) DATA_ITEM,
+               DECODE( ACC.CODE_ITEM, '001', '타발점사무소코드'  ,
+                                      '002',  SLI.CODE_CUST      ,
+                                      '003', '거래처계좌은행코드',
+                                      '004', '거래처계좌번호'    ,
+                                      '005', '거래처계좌실명'    ,
+                                      '006', '출금'              ,
+                                      '007', '은행'              ,
+                                      '008', '계좌번호'          ,
+                                      '009', '신용카드번호'      ,
+                                      '010', '기부구분'          ,
+                                      '011', '세무구분'          ,
+                                      '012', '증빙종류'          ,
+                                      '013', '과세구분'          ,
+                                      '014', '거래일자'          ,
+                                      '015', '공급가액'          ,
+                                      '016', '세액'              ,
+                                      '017', '조정금액'          ,
+                                      '018', '합계금액'          ,
+                                      '019', '만기일자'          ,
+                                      '020', '사원'              ,
+                                      '021', '부서코드'          ,
+                                      '022', '모선번호'          ,
+                                      '023', '모선명'            ,
+                                      '024', '품목코드'          ,
+                                      '025', '품명'              ,
+                                      '027', '잔액'              ,
+                                      '028', '일수'              ,
+                                      '029', '환율'              ,
+                                      '030', '통화코드'          ,
+                                      '031', '예치금이자'        ,
+                                      '032', '봉사료'            ,
+                                      '033', '차입계좌번호'      ,
+                                      '035', '비고'              ,       
+                                      '036', SLI.CODE_YAKJEONG   ,
+                                      NULL
+                      ) NM_DATA_ITEM,
+               ACC.YN_PILSU,
+               ACC.YN_PRINT
+          FROM TB_AC_ACCT_ITEM  ACC
+              ,TB_US_SLIP_D SLI
+         WHERE
+               ACC.CODE_COMPANY = SLI.CODE_COMPANY
+           AND ACC.CODE_ACCT    = SLI.CODE_ACCT
+           AND ACC.GBN_DRCR     = DECODE(SLI.GBN_JEOKJA, '2',DECODE(SLI.GBN_DRCR,'2','1','2' ),SLI.GBN_DRCR)
+           AND ACC.CODE_COMPANY = '13'
+           AND SLI.NO_SLIP      = :p_cd_samuso||:p_dt_acct||:p_seq_acct
+        ;
+
+/*------------------------------------------------------------------------------------------------*/
+/* 커서 열때 오류가 발생하면 종료.                                                                */
+/*------------------------------------------------------------------------------------------------*/   
+    if (SQL_CODE != SQL_OK) {
+        CF_SET_ERROR_MSG("CURSOR Open Error", __FILE__, __LINE__);
+        INTLOOK(__FILE__,"회계관리항목 정보 입력중 오류가 발생 하였습니다   \n",SQL_CODE );
+        return(FAIL);
+    }
+
+    return(SUCCESS);
+}
+  
+/*------------------------------------------------------------------------------
+ * SC_MOG_BUNGAE END.
+ *----------------------------------------------------------------------------*/
+
+

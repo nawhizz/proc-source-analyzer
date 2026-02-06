@@ -1,0 +1,60 @@
+/*------------------------------------------------------------------------------------------------*
+ * FUNCTION ID : sf_us_number_exist(회사코드, 시스템코드, 구분번호,사무소, 회계일자, '', '', 반환값)*
+ * 기       능 : 채번테이블체크                                                                   *
+ * 반   환  값 : p_rtn_yn  처리결과:실패(N),성공(Y)                                               *
+ * Function위치: ($HOME)/lib/SC_MOG_COMMON.pc                                                     *
+ *------------------------------------------------------------------------------------------------*/
+ int sf_us_number_exist ( char *p_cd_company
+                         ,char *p_cd_system
+                         ,char *p_gbn_no
+                         ,char *p_det_number1  /*사무소            */                    
+                         ,char *p_det_number2  /*회계일자 (전표키) */               
+                         ,char *p_det_number3                         
+                         ,char *p_det_number4                  
+                         ,char *p_rtn_yn)
+{
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    EXEC SQL BEGIN DECLARE SECTION;        
+         char      out_p_no      [ 5+1];                              
+
+    EXEC SQL END   DECLARE SECTION;
+    /*--------------------------------------------------------------------------------------------*/
+    /* 변수 선언 및 초기화.                                                                       */
+    /*--------------------------------------------------------------------------------------------*/
+    INITCHAR(out_p_no                 );                              /* 처리결과                 */
+    /*--------------------------------------------------------------------------------------------*/
+    /* 업무단위 호출.                                                                             */
+    /*--------------------------------------------------------------------------------------------*/
+   printf("\n ========================sf_us_number_exist 시작===========================================\n");
+   printf("\n cd_company => [%s]\n", p_cd_company);
+   printf("\n cd_system => [%s]\n", p_cd_system);
+   printf("\n gbn_number => [%s]\n", p_gbn_no);
+   printf("\n det_number1 => [%s]\n", p_det_number1);
+   printf("\n det_number2 => [%s]\n", p_det_number2);
+   printf("\n det_number3 => [%s]\n", p_det_number3);
+   printf("\n det_number4 => [%s]\n", p_det_number4);
+   printf("\n ========================sf_us_number_exist 끝 ===========================================\n");
+    EXEC SQL
+        SELECT 1
+        INTO :out_p_no
+          FROM tb_us_number
+         WHERE code_company = :p_cd_company
+           AND code_system  = :p_cd_system
+           AND gbn_number   = :p_gbn_no
+           AND det_number1  = NVL(:p_det_number1,' ')
+           AND det_number2  = NVL(:p_det_number2,' ')
+           AND det_number3  = NVL(:p_det_number3,' ')
+           AND det_number4  = NVL(:p_det_number4,' ')
+        ;
+        if (SQL_CODE != SQL_OK) {
+            CF_SET_ERROR_MSG("CURSOR Open Error", __FILE__, __LINE__);
+            INTLOOK(__FILE__,"채번테이블 확인 중 오류가 발생하였습니다   \n",SQL_CODE );
+            return(FAIL);
+        }
+        
+        strcpy(p_rtn_yn, "Y") ;
+
+    return(SUCCESS);
+}
