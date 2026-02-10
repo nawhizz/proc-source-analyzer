@@ -131,9 +131,10 @@ python proc_analyzer.py -f test_sample.pc -c utf-8
 ### 소스 설명 추출
 소스 파일 상단의 주석에서 다음 순서대로 키워드를 찾아 설명을 추출합니다.
 1. `프로그램명 : ...`
-2. `파일명(한글) : ...`
-3. `Description : ...`
-4. `Descritpion : ...` (오타 대응)
+2. `기    능 : ...` (공백 포함 허용)
+3. `파일명(한글) : ...`
+4. `Description : ...`
+5. `Descritpion : ...` (오타 대응)
 
 ## 출력 예시
 
