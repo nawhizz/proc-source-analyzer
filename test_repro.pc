@@ -1,0 +1,44 @@
+#include <stdio.h>
+#include <string.h>
+#include <sqlca.h>
+
+void prev_function() {
+    printf("This is the previous function.\n");
+}
+
+/*
+ * Problematic Function
+ */
+void problem_function() {
+    EXEC SQL BEGIN DECLARE SECTION;
+        char *bsc_adr;
+        char *post_no;
+        char query[1024];
+    EXEC SQL END DECLARE SECTION;
+
+    /* The code structure from the user's image */
+    EXEC SQL
+        INSERT INTO NHPT.TB_HP_AL_LM_NEWNCHTHSTR
+        (
+            TODNW_ADR_DS_C,
+            POST_NO,
+            BSC_ADR
+        )
+        VALUES
+        (
+            CASE WHEN LENGTH(TRIM(:newnchtstr->bsc_adr)) > 0 AND LENGTH(TRIM(:newnchtstr->post_no)) = 5 THEN '01'
+                 WHEN LENGTH(TRIM(:newnchtstr->bsc_adr)) > 0 THEN '02'
+                 ELSE NULL
+            END,
+            TRIM(:newnchtstr->post_no),
+            TRIM(:newnchtstr->bsc_adr)
+        );
+        
+    if (sqlca.sqlcode != 0) {
+        printf("Error\n");
+    }
+}
+
+void next_function() {
+    printf("This is the next function.\n");
+}

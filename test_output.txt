@@ -1,0 +1,5 @@
+[Info] ?뚯씪 遺꾩꽍 ?쒖옉: SC_MOG_COMMON_utf8.pc (Encoding: utf-8)
+[Info] ?붾젆?좊━ 議댁옱: SC_MOG_COMMON_utf8
+[Info] 珥?2媛쒖쓽 ?⑥닔瑜?李얠븯?듬땲??
+[Success] ?뚯씪 ?앹꽦: SC_MOG_COMMON_utf8\AL_COM_NEWMCHTMSTR_I01.pc
+[Success] ?뚯씪 ?앹꽦: SC_MOG_COMMON_utf8\AL_COM_OFFRBRK_U01.pc

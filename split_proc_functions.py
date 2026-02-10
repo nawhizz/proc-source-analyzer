@@ -61,34 +61,77 @@ def split_proc_functions(file_path, encoding='euc-kr'):
         re.MULTILINE | re.DOTALL
     )
     
-    # 모든 함수 정의 찾기
-    func_matches_raw = list(func_pattern.finditer(content))
-    
     # 예약어 필터링 (else if 등을 함수로 오인하는 경우 방지)
     # SQL 키워드(INSERT, UPDATE 등)가 Type이나 Name에 오는 경우도 제외
+    # SQL 함수(TO_NUMBER, TO_CHAR 등)도 제외
     RESERVED_WORDS = {
+        # C 언어 제어문/키워드
         'if', 'while', 'for', 'switch', 'catch', 'return', 'else', 
+        'do', 'case', 'default', 'break', 'continue', 'goto', 'sizeof', 'typedef', 'volatile',
+        
+        # SQL DML/DDL 키워드
         'EXEC', 'INSERT', 'UPDATE', 'DELETE', 'SELECT', 'FROM', 'WHERE', 'AND', 'OR',
-        'do', 'case', 'default', 'break', 'continue', 'goto', 'sizeof', 'typedef', 'volatile'
+        'CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'MERGE', 'INTO', 'VALUES', 'ELSE',
+        
+        # SQL 함수 (Oracle 등)
+        'TO_NUMBER', 'TO_CHAR', 'TO_DATE', 'TO_TIMESTAMP',
+        'NVL', 'NVL2', 'DECODE', 'CASE', 'WHEN', 'THEN', 'END',
+        'SUBSTR', 'SUBSTRB', 'INSTR', 'LENGTH', 'LENGTHB', 'REPLACE', 'TRANSLATE',
+        'TRIM', 'LTRIM', 'RTRIM', 'LPAD', 'RPAD', 'UPPER', 'LOWER', 'INITCAP',
+        'ROUND', 'TRUNC', 'MOD', 'ABS', 'CEIL', 'FLOOR', 'SIGN', 'POWER', 'SQRT',
+        'SYSDATE', 'SYSTIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIMESTAMP',
+        'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'LISTAGG', 'RANK', 'ROW_NUMBER',
+        'COALESCE', 'NULLIF', 'GREATEST', 'LEAST',
+        'CAST', 'CONVERT', 'EXTRACT',
     }
     
-    func_matches = []
-    
-    for m in func_matches_raw:
-        name = m.group('name')
-        type_str = m.group('type').strip()
+    def is_real_function(match):
+        """
+        매칭이 실제 함수 정의인지 판별합니다.
+        이름이나 반환 타입의 첫 단어가 예약어이면 False를 반환합니다.
+        """
+        name = match.group('name')
+        type_str = match.group('type').strip()
         
         # 1. 이름이 예약어인지 확인
         if name in RESERVED_WORDS:
-            continue
+            return False
             
         # 2. 반환 타입의 첫 단어가 예약어인지 확인 (예: INSERT INTO ...)
-        # Type은 "int ", "char * " 등이므로 첫 단어만 추출해서 비교
         type_first_word = type_str.split()[0]
         if type_first_word in RESERVED_WORDS:
-            continue
+            return False
             
-        func_matches.append(m)
+        return True
+    
+    # 함수 찾기: search + while 루프 방식
+    #
+    # 핵심 문제: finditer는 non-overlapping 매칭만 반환합니다.
+    # CASE WHEN LENGTH(...) 같은 SQL 구문이 regex에 넓은 범위로 매칭되면,
+    # 그 범위 안에 있는 실제 함수 정의(예: AL_COM_OFFRBRK_U01)를 삼킵니다.
+    #
+    # 해결책: search()로 하나씩 찾으면서,
+    # 가짜 매칭(예약어)이면 다음 줄부터 다시 검색합니다.
+    func_matches = []
+    search_pos = 0
+    
+    while search_pos < len(content):
+        m = func_pattern.search(content, search_pos)
+        if m is None:
+            break
+            
+        if is_real_function(m):
+            # 실제 함수 → 결과에 추가, 매칭 끝 이후부터 계속 검색
+            func_matches.append(m)
+            search_pos = m.end()
+        else:
+            # 가짜 매칭(예약어) → 다음 줄 시작부터 재검색
+            # 이렇게 하면 가짜 매칭이 삼킨 영역 안의 실제 함수도 찾을 수 있음
+            next_newline = content.find('\n', m.start())
+            if next_newline != -1:
+                search_pos = next_newline + 1
+            else:
+                break
             
     if not func_matches:
         print(f"[Warning] 함수 정의를 찾을 수 없습니다.")
@@ -98,7 +141,34 @@ def split_proc_functions(file_path, encoding='euc-kr'):
     # ... (find_start_with_comment logic is same)
     
     def find_start_with_comment(content, func_start_index):
-        # 역방향으로 한 줄씩 검사
+        """
+        함수 정의 시작점 앞에 있는 주석 블록의 시작 위치를 찾습니다.
+        
+        지원하는 주석 스타일:
+        1. 블록 주석: /* ... */ (여러 줄에 걸친 단일 주석)
+        2. 반복 단일 줄 주석: /* ... */ \n /* ... */ \n ... (각 줄이 /* */로 감싸짐)
+        
+        주의: 인라인 주석(코드 뒤에 붙은 주석)은 함수 설명으로 간주하지 않습니다.
+        예: time_t sec; /* Time.h */ <- 이것은 인라인 주석이므로 제외
+        """
+        
+        def is_block_comment_start(content, comment_start_idx):
+            """
+            주석이 라인의 시작 부분에서 시작하는지 확인합니다.
+            (인라인 주석이 아닌 블록 주석인지 판별)
+            """
+            # 주석 시작 위치에서 역방향으로 탐색하여 해당 라인의 시작 찾기
+            line_start = comment_start_idx
+            while line_start > 0 and content[line_start - 1] != '\n':
+                line_start -= 1
+            
+            # 라인 시작부터 주석 시작까지의 내용 확인
+            before_comment = content[line_start:comment_start_idx]
+            
+            # 공백만 있으면 블록 주석 (함수 설명 주석)
+            # 공백 외 다른 문자가 있으면 인라인 주석
+            return before_comment.strip() == ''
+        
         curr_idx = func_start_index
         
         # 앞쪽의 공백/줄바꿈 스킵
@@ -107,11 +177,52 @@ def split_proc_functions(file_path, encoding='euc-kr'):
             
         # 바로 앞이 '*/' 인지 확인 (주석 끝)
         if curr_idx >= 2 and content[curr_idx-2:curr_idx] == '*/':
-            # 주석 시작('/*') 찾기
+            # 주석 끝 위치 저장
             comment_end = curr_idx
-            comment_start = content.rfind('/*', 0, comment_end)
-            if comment_start != -1:
-                return comment_start
+            
+            # 현재 주석 블록의 시작 찾기
+            current_comment_start = content.rfind('/*', 0, comment_end)
+            
+            if current_comment_start == -1:
+                return curr_idx  # 주석 시작을 못 찾으면 함수 시작점 반환
+            
+            # 인라인 주석인지 확인
+            if not is_block_comment_start(content, current_comment_start):
+                # 인라인 주석이면 함수 정의 시작점(공백 제외) 사용
+                return curr_idx
+                
+            # 블록 주석인 경우, 앞에 더 연속된 주석이 있는지 확인
+            final_start = current_comment_start
+            
+            search_idx = current_comment_start
+            while search_idx > 0:
+                # 공백/줄바꿈 스킵
+                temp_idx = search_idx
+                while temp_idx > 0 and content[temp_idx-1].isspace():
+                    temp_idx -= 1
+                    
+                # 바로 앞이 '*/' 인지 확인
+                if temp_idx >= 2 and content[temp_idx-2:temp_idx] == '*/':
+                    # 이전 주석 블록 찾기
+                    prev_comment_end = temp_idx
+                    prev_comment_start = content.rfind('/*', 0, prev_comment_end)
+                    
+                    if prev_comment_start != -1:
+                        # 이전 주석이 블록 주석인지 확인
+                        if is_block_comment_start(content, prev_comment_start):
+                            # 함수 설명의 일부로 포함
+                            final_start = prev_comment_start
+                            search_idx = prev_comment_start
+                        else:
+                            # 인라인 주석이면 여기서 중단
+                            break
+                    else:
+                        break
+                else:
+                    # 더 이상 주석이 없음
+                    break
+                    
+            return final_start
         
         # 주석이 없으면 함수 정의 시작점(공백 제외) 사용
         return curr_idx

@@ -1,0 +1,35 @@
+?뚯씪 湲몄씠: 10789 臾몄옄
+?뺢퇋??finditer ?ㅽ뻾 以?..
+(?됱씠 嫄몃━硫?catastrophic backtracking ?섏떖)
+
+珥?4媛?留ㅼ묶 諛쒓껄:
+
+  [1] Line 14: ACCEPTED
+       Type: 'bool'
+       Type First Word: 'bool'
+       Name: 'AL_COM_NEWMCHTMSTR_I01'
+       Match span: 912-1018
+       Match text (first 100): 'bool AL_COM_NEWMCHTMSTR_I01(TB_MP_AL_LM_NEWHTMSTR *newmchtmstr, char *f_intf_err_c, char *f_intf_err...'
+
+  [2] Line 39: FILTERED
+       Type: 'CASE WHEN'
+       Type First Word: 'CASE'
+       Name: 'LENGTH'
+       Match span: 2228-4929
+       Match text (first 100): '		  CASE WHEN LENGTH(TRIM(:newmchtnstr->bsc_adr)) > 0 AND LENGTH(TRIM(:newmchtnstr->post_no)) = 5 TH...'
+
+  [3] Line 118: FILTERED
+       Type: 'else'
+       Type First Word: 'else'
+       Name: 'if'
+       Match span: 6845-6894
+       Match text (first 100): '        else if (evar.txtype == TX_NXA)
+        {...'
+
+  [4] Line 190: FILTERED
+       Type: 'else'
+       Type First Word: 'else'
+       Name: 'if'
+       Match span: 9553-9602
+       Match text (first 100): '        else if (evar.txtype == TX_NXA)
+        {...'

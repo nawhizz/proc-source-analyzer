@@ -1,0 +1,142 @@
+/******************************************************************************/
+/* FUNCTION ID : CF_END_SERVICE(로그기록여부)                                 */
+/* 기       능 : 처리결과, 메모리FREE, tpreturn 처리                          */
+/* 트랜잭션처리: TX_XA  -> 전역 트랜잭션 관리                                 */
+/*               TX_NXA ->      트랜잭션 관리 안함                            */
+/******************************************************************************/
+/* 반   환  값 : 없음                                                         */
+/******************************************************************************/
+bool AL_COM_OFFRBRK_U01(TB_MP_AL_EH_OFFRBRK *offbrk)
+{
+    /*--------------------------------------------------------------------------
+     * Global Transaction(전역 트랜잭션 관련) 변수 선언.
+     *------------------------------------------------------------------------*/
+    int     txret = 0;                                /* 트랜잭션 변수 선언   */
+    TXINFO  txinfo;                                   /* 트랜잭션 정보 선언   */
+
+    /*--------------------------------------------------------------------------
+     * 전역변수 설정.
+     *------------------------------------------------------------------------*/
+    time(&sec);                                        /* 타임설정            */
+
+    t = localtime(&sec);                               /* 현 SYSTEM DATETIME  */
+    sprintf((char *)evar.tm_end_service.arr,"%02d%02d%02d",t->tm_hour,t->tm_min,t->tm_sec);
+    evar.tm_end_service.len = strlen(evar.tm_end_service.arr);
+    /*--------------------------------------------------------------------------
+     * FDL 버퍼나 malloc 한 메모리 FREE.
+     *------------------------------------------------------------------------*/
+    FB_FREE(recvbuf                    );             /* 수신버퍼             */
+    FB_FREE(sendbuf                    );             /* 송신버퍼             */
+    /*--------------------------------------------------------------------------
+     * 처리 결과 최종확인 후 처리.
+     *------------------------------------------------------------------------*/
+    if (evar.result == SUCCESS)
+    {
+        if (evar.txtype == TX_XA)
+        {
+            txret = tx_commit();                      /* XA 전역트랜잭션 커밋 */
+            if (txret < 0)
+            {
+                tx_rollback();                        /* XA 전역트랜잭션 롤백 */
+                CHARTOVAR(evar.msg, "전역트랜잭션 커밋 중 오류가 발생하여 롤백 하였습니다. 농협정보시스템 담당자에게 연락하세요!!!");
+                FB_PUT_V(tranbuf, INF013, evar.msg,  "메세지반환");
+                CF_SAVE_LOG(yn_log, "2");
+                TP_RETURN_ERROR(tranbuf);
+            }
+        }
+        else if (evar.txtype == TX_NXA)
+        {
+            EXEC SQL COMMIT WORK;
+        }
+/*
+        if (strcmp(evar.msg.arr,"") == 0 &&
+           (strncmp(evar.id_program.arr, "SD", 2) == 0||
+            strncmp(evar.id_program.arr, "PP", 2) == 0||
+            strncmp(evar.id_program.arr, "EC", 2) == 0))
+        {
+*/
+            switch (evar.gbn_service.arr[0])
+            {
+              case 'I' :
+                  CHARTOVAR(evar.msg, "정상적으로 저장되었습니다.");
+                  break;
+              case 'U' :
+                  CHARTOVAR(evar.msg, "정상적으로 수정되었습니다.");
+                  break;
+              case 'D' :
+                  CHARTOVAR(evar.msg, "정상적으로 삭제되었습니다.");
+                  break;
+/*
+              case 'P' :
+                  CHARTOVAR(evar.msg, "정상적으로 처리되었습니다.");
+                  break;
+*/
+              case 'S' :
+                  if (evar.cnt_total == 0)
+                  {
+                      /*CHARTOVAR(evar.msg, "조건에 일치하는 데이타가 존재하지 않습니다.");*/
+                  }
+                  else
+                  {
+                      /* CHARTOVAR(evar.msg, "정상적으로 조회되었습니다."); */
+                  }
+                  break;
+              default :
+                  CHARTOVAR(evar.msg, "정상적으로 처리되었습니다.");
+                  break;
+            }
+/*
+        }
+*/
+        CHARTOVAR(evar.yn_user_err,"Y");
+        FB_PUT_V(tranbuf, INF011, evar.yn_user_err   , "사용자에러여부");
+        FB_PUT_V(tranbuf, INF012, evar.msg           , "메세지반환    ");
+        FB_PUT_I(tranbuf, INF013, evar.cnt_total     , "총건수        ");
+        FB_PUT_V(tranbuf, INF014, evar.dyn_sql,  "SQL");
+/*
+        FB_PUT_I(tranbuf, INF004, evar.cur_page      , "현재PAGE      ");
+        FB_PUT_I(tranbuf, INF004, evar.cnt_row_page  , "PAGE당 건수   ");
+*/
+        CF_SAVE_LOG(yn_log, "1"); /* 에러 없는데 로그 남김 */
+
+        /*----------------------------------------------------------------------
+         * 기본로그 출력.
+         *--------------------------------------------------------------------*/
+        printf("\n\n\n [%s] 서비스가 정상 종료되었습니다. (종료시간 :: [%s], 서비스모드 :: [%s], 호출 JSP :: [%s], 총 건수 [%d]\n\n", evar.svc_program.arr, evar.tm_end_service.arr
+                                                                                                                                    , evar.gbn_service.arr, evar.jsp_program.arr         
+                                                                                                                                    , evar.cnt_total                                    );
+/*
+fbprint(tranbuf);
+*/
+        TP_RETURN(tranbuf);
+    }
+    else
+    {
+        if (evar.txtype == TX_XA)
+        {
+            tx_rollback();                            /* XA 전역트랜잭션 롤백 */
+        }
+        else if (evar.txtype == TX_NXA)
+        {
+            EXEC SQL ROLLBACK WORK;                   /* LXA 트랜잭션 롤백    */
+        }
+
+        FB_PUT_V(tranbuf, INF014, evar.dyn_sql,  "SQL");
+        FB_PUT_V(tranbuf, INF011, evar.yn_user_err   , "사용자에러여부");
+        FB_PUT_V(tranbuf, INF012, evar.msg           , "메세지반환    ");
+        FB_PUT_I(tranbuf, INF013, 0                  , "총건수        ");
+
+        CF_SAVE_LOG(yn_log, "2"); /* 에러 있어서 로그 남김 */
+
+        /*----------------------------------------------------------------------
+         * 기본로그 출력.
+         *--------------------------------------------------------------------*/
+        printf("\n\n\n [%s] 서비스가 오류 종료되었습니다. (종료시간 :: [%s], 서비스모드 :: [%s], 호출 JSP :: [%s]\n오류 ::: [%s]\n\n\n", evar.svc_program.arr, evar.tm_end_service.arr
+                                                                                                                                       , evar.gbn_service.arr, evar.jsp_program.arr         
+                                                                                                                                       , evar.msg.arr                                   );
+/*
+fbprint(tranbuf);
+*/
+        TP_RETURN_ERROR(tranbuf);
+    }
+}
